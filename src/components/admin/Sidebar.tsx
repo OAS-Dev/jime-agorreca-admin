@@ -3,12 +3,42 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { LayoutDashboard, Users, HelpCircle, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShieldCheck, Users, HelpCircle, LogOut } from 'lucide-react';
 
-const navItems = [
+const mainItems = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
-  { href: '/usuarios', label: 'Usuarios', icon: Users },
 ];
+
+const userItems = [
+  { href: '/usuarios/equipo',        label: 'Equipo',        icon: ShieldCheck },
+  { href: '/usuarios/suscriptores',  label: 'Suscriptores',  icon: Users },
+];
+
+function NavItem({
+  href,
+  label,
+  icon: Icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-headline font-bold transition-all duration-150 ${
+        active
+          ? 'bg-primary/[0.08] text-primary'
+          : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'
+      }`}
+    >
+      <Icon className='h-5 w-5 shrink-0' />
+      {label}
+    </Link>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -33,23 +63,31 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className='flex-1 space-y-1'>
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href;
-          return (
-            <Link
+        {mainItems.map(({ href, label, icon }) => (
+          <NavItem
+            key={href}
+            href={href}
+            label={label}
+            icon={icon}
+            active={pathname === href}
+          />
+        ))}
+
+        {/* Sección Usuarios */}
+        <div className='pt-4'>
+          <p className='px-4 pb-2 text-[10px] font-body font-black uppercase tracking-widest text-on-surface-variant/50'>
+            Usuarios
+          </p>
+          {userItems.map(({ href, label, icon }) => (
+            <NavItem
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-headline font-bold transition-all duration-150 ${
-                active
-                  ? 'bg-primary/[0.08] text-primary'
-                  : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'
-              }`}
-            >
-              <Icon className='h-5 w-5 shrink-0' />
-              {label}
-            </Link>
-          );
-        })}
+              label={label}
+              icon={icon}
+              active={pathname.startsWith(href)}
+            />
+          ))}
+        </div>
       </nav>
 
       {/* Bottom */}
