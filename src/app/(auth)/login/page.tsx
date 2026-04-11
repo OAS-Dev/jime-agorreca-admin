@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import Link from 'next/link';
-import { Eye, EyeOff, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -224,14 +223,6 @@ export default function LoginPage() {
 
           {/* Footer */}
           <div className='mt-12 pt-8 border-t border-surface-container flex flex-col gap-5'>
-            <Link
-              href='https://jimeagorreca.com'
-              className='flex items-center gap-2 text-on-surface-variant hover:text-primary font-body font-semibold text-sm transition-colors group w-fit'
-            >
-              <ArrowLeft className='h-4 w-4 group-hover:-translate-x-1 transition-transform duration-200' />
-              Volver al sitio web principal
-            </Link>
-
             <div className='flex flex-col gap-1'>
               <p className='text-xs font-body text-on-surface-variant/60'>
                 © {new Date().getFullYear()} Jime Agorreca. Todos los derechos reservados.
