@@ -7,8 +7,11 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Download,
   TrendingUp,
+  Clock,
+  XCircle,
+  CreditCard,
+  Zap,
 } from 'lucide-react';
 import api from '@/lib/api';
 import {
@@ -25,15 +28,41 @@ import { Button } from '@/components/ui/button';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface AdminUser {
+type SubscriptionStatus = 'ACTIVE' | 'PENDING' | 'EXPIRED' | 'CANCELLED';
+type PaymentStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REFUNDED';
+type Gateway = 'MERCADOPAGO' | 'PAYPAL';
+type BillingPeriod = 'MONTHLY' | 'ANNUAL';
+
+interface Subscription {
   id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  role: 'USER' | 'ADMIN';
-  provider: 'credentials' | 'google';
+  status: SubscriptionStatus;
+  startDate: string | null;
+  endDate: string | null;
+  cancelledAt: string | null;
   createdAt: string;
+  plan: {
+    name: string;
+    priceArs: string;
+    priceUsd: string;
+    billingPeriod: BillingPeriod;
+  };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    image: string | null;
+  };
+  payments: {
+    id: string;
+    gateway: Gateway;
+    status: PaymentStatus;
+    amount: string;
+    currency: string;
+    createdAt: string;
+  }[];
 }
+
+type FilterTab = 'ALL' | SubscriptionStatus;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,13 +70,40 @@ function getInitials(name: string) {
   return name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase();
 }
 
-function formatDate(iso: string) {
+function formatDate(iso: string | null) {
+  if (!iso) return '—';
   return new Date(iso).toLocaleDateString('es-AR', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
 }
+
+function isExpiringSoon(endDate: string | null): boolean {
+  if (!endDate) return false;
+  const days = (new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+  return days > 0 && days <= 7;
+}
+
+const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; variant: 'success' | 'neutral' | 'error' | 'warning' }> = {
+  ACTIVE:    { label: 'Activa',    variant: 'success'  },
+  PENDING:   { label: 'Pendiente', variant: 'warning'  },
+  EXPIRED:   { label: 'Vencida',   variant: 'error'    },
+  CANCELLED: { label: 'Cancelada', variant: 'neutral'  },
+};
+
+const GATEWAY_LABEL: Record<Gateway, string> = {
+  MERCADOPAGO: 'Mercado Pago',
+  PAYPAL:      'PayPal',
+};
+
+const FILTER_TABS: { value: FilterTab; label: string }[] = [
+  { value: 'ALL',       label: 'Todas'      },
+  { value: 'ACTIVE',    label: 'Activas'    },
+  { value: 'PENDING',   label: 'Pendientes' },
+  { value: 'EXPIRED',   label: 'Vencidas'   },
+  { value: 'CANCELLED', label: 'Canceladas' },
+];
 
 const PAGE_SIZE = 10;
 
@@ -61,14 +117,51 @@ function SkeletonRow() {
           <div className='w-12 h-12 rounded-2xl bg-surface-container-high shrink-0' />
           <div className='space-y-2'>
             <div className='h-3.5 w-32 bg-surface-container-high rounded-full' />
-            <div className='h-2.5 w-20 bg-surface-container-high rounded-full' />
+            <div className='h-2.5 w-40 bg-surface-container-high rounded-full' />
           </div>
         </div>
       </TableCell>
-      <TableCell><div className='h-3 w-44 bg-surface-container-high rounded-full' /></TableCell>
       <TableCell><div className='h-5 w-20 bg-surface-container-high rounded-full' /></TableCell>
-      <TableCell><div className='h-3 w-24 bg-surface-container-high rounded-full' /></TableCell>
+      <TableCell><div className='h-3.5 w-28 bg-surface-container-high rounded-full' /></TableCell>
+      <TableCell><div className='h-3.5 w-24 bg-surface-container-high rounded-full' /></TableCell>
+      <TableCell><div className='h-3.5 w-20 bg-surface-container-high rounded-full' /></TableCell>
     </TableRow>
+  );
+}
+
+// ── Metric card ───────────────────────────────────────────────────────────────
+
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
+  loading,
+  accent,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ElementType;
+  loading: boolean;
+  accent?: string;
+}) {
+  return (
+    <div className='bg-surface-container-lowest p-6 rounded-2xl shadow-kinetic flex items-center justify-between relative overflow-hidden group'>
+      <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl transition-all ${accent ?? 'bg-primary/10 group-hover:bg-primary/20'}`} />
+      <div className='space-y-1 relative z-10'>
+        <p className='text-[10px] font-body font-black uppercase tracking-widest text-on-surface-variant'>
+          {label}
+        </p>
+        <h3 className='text-4xl font-headline font-black text-on-surface'>
+          {loading
+            ? <span className='inline-block h-10 w-14 bg-surface-container-high rounded-xl animate-pulse' />
+            : value
+          }
+        </h3>
+      </div>
+      <div className='bg-primary/10 p-4 rounded-2xl relative z-10'>
+        <Icon className='h-7 w-7 text-primary' />
+      </div>
+    </div>
   );
 }
 
@@ -77,44 +170,49 @@ function SkeletonRow() {
 export default function SuscriptoresPage() {
   const { data: session } = useSession();
 
-  const [allUsers, setAllUsers]   = useState<AdminUser[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const [search, setSearch]       = useState('');
-  const [page, setPage]           = useState(1);
+  const [subs, setSubs]       = useState<Subscription[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+  const [search, setSearch]   = useState('');
+  const [filter, setFilter]   = useState<FilterTab>('ALL');
+  const [page, setPage]       = useState(1);
 
   useEffect(() => {
     if (!session?.backendToken) return;
-
     setLoading(true);
     setError(null);
 
     api
-      .get<AdminUser[]>('/users', {
+      .get<Subscription[]>('/subscriptions', {
         headers: { Authorization: `Bearer ${session.backendToken}` },
       })
-      .then(({ data }) => {
-        setAllUsers(data.filter((u) => u.role === 'USER'));
-      })
-      .catch((err) => {
-        setError(err?.response?.data?.message ?? err?.message ?? 'Error al cargar suscriptores');
-      })
+      .then(({ data }) => setSubs(data))
+      .catch((err) => setError(err?.response?.data?.message ?? err?.message ?? 'Error al cargar suscripciones'))
       .finally(() => setLoading(false));
   }, [session?.backendToken]);
 
-  // Client-side search
-  const filtered = useMemo(() => {
-    if (!search.trim()) return allUsers;
-    const q = search.toLowerCase();
-    return allUsers.filter(
-      (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
-    );
-  }, [allUsers, search]);
+  // Reset page on filter/search change
+  useEffect(() => { setPage(1); }, [search, filter]);
 
-  useEffect(() => { setPage(1); }, [search]);
+  const filtered = useMemo(() => {
+    let result = subs;
+
+    if (filter !== 'ALL') result = result.filter((s) => s.status === filter);
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.user.name.toLowerCase().includes(q) ||
+          s.user.email.toLowerCase().includes(q),
+      );
+    }
+
+    return result;
+  }, [subs, filter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const visiblePages = Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
     if (totalPages <= 5)        return i + 1;
@@ -123,64 +221,75 @@ export default function SuscriptoresPage() {
     return page - 2 + i;
   });
 
-  return (
-    <div className='p-8 max-w-5xl mx-auto space-y-10'>
+  // Metrics
+  const activeCount    = subs.filter((s) => s.status === 'ACTIVE').length;
+  const pendingCount   = subs.filter((s) => s.status === 'PENDING').length;
+  const expiredCount   = subs.filter((s) => s.status === 'EXPIRED' || s.status === 'CANCELLED').length;
 
-      {/* ── Search bar ──────────────────────────────────────────────────── */}
-      <div className='relative w-full max-w-md group'>
-        <Search className='absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant group-focus-within:text-primary transition-colors pointer-events-none z-10' />
-        <Input
-          type='text'
-          placeholder='Buscar por nombre o email...'
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className='pl-10 bg-surface-container-highest focus:bg-surface-container-highest focus:border-transparent'
-        />
+  return (
+    <div className='p-8 max-w-6xl mx-auto space-y-10'>
+
+      {/* ── Page header ─────────────────────────────────────────────────── */}
+      <div className='space-y-1'>
+        <h2 className='text-4xl font-headline font-extrabold tracking-tight text-on-surface'>
+          Suscriptores
+        </h2>
+        <p className='text-on-surface-variant font-body font-medium'>
+          Estado de todas las membresías en la plataforma.
+        </p>
       </div>
 
-      {/* ── Page header + metric ────────────────────────────────────────── */}
-      <section className='grid grid-cols-1 md:grid-cols-3 gap-8 items-end'>
-        <div className='md:col-span-2 space-y-2'>
-          <h2 className='text-4xl font-headline font-extrabold tracking-tight text-on-surface'>
-            Suscriptores
-          </h2>
-          <p className='text-on-surface-variant font-body font-medium'>
-            Usuarios registrados en la plataforma.
-          </p>
+      {/* ── Metrics ─────────────────────────────────────────────────────── */}
+      <div className='grid grid-cols-2 lg:grid-cols-4 gap-4'>
+        <MetricCard label='Total'     value={subs.length}    icon={Users}      loading={loading} />
+        <MetricCard label='Activas'   value={activeCount}    icon={TrendingUp} loading={loading} accent='bg-green-500/10 group-hover:bg-green-500/20' />
+        <MetricCard label='Pendientes' value={pendingCount}  icon={Clock}      loading={loading} accent='bg-secondary-container/30 group-hover:bg-secondary-container/50' />
+        <MetricCard label='Inactivas' value={expiredCount}   icon={XCircle}    loading={loading} accent='bg-destructive/10 group-hover:bg-destructive/20' />
+      </div>
+
+      {/* ── Filters + Search ────────────────────────────────────────────── */}
+      <div className='flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between'>
+
+        {/* Filter tabs */}
+        <div className='flex items-center gap-1 bg-surface-container-low rounded-2xl p-1 flex-wrap'>
+          {FILTER_TABS.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setFilter(value)}
+              className={`px-4 py-2 rounded-xl text-xs font-body font-bold transition-all ${
+                filter === value
+                  ? 'bg-surface-container-lowest text-on-surface shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <div className='bg-surface-container-lowest p-6 rounded-2xl shadow-kinetic flex items-center justify-between relative overflow-hidden group'>
-          <div className='absolute -right-4 -top-4 w-24 h-24 bg-secondary-container/20 rounded-full blur-2xl group-hover:bg-secondary-container/40 transition-colors' />
-          <div className='space-y-1 relative z-10'>
-            <p className='text-[10px] font-body font-black uppercase tracking-widest text-on-surface-variant'>
-              Total
-            </p>
-            <h3 className='text-5xl font-headline font-black text-on-surface'>
-              {loading
-                ? <span className='inline-block h-12 w-20 bg-surface-container-high rounded-xl animate-pulse' />
-                : allUsers.length.toLocaleString('es-AR')
-              }
-            </h3>
-            <div className='flex items-center gap-1 text-tertiary font-body font-bold text-sm'>
-              <TrendingUp className='h-4 w-4' />
-              <span>Suscriptores</span>
-            </div>
-          </div>
-          <div className='bg-primary/10 p-4 rounded-2xl relative z-10'>
-            <Users className='h-8 w-8 text-primary' />
-          </div>
+        {/* Search */}
+        <div className='relative w-full sm:w-72 group shrink-0'>
+          <Search className='absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant group-focus-within:text-primary transition-colors pointer-events-none z-10' />
+          <Input
+            type='text'
+            placeholder='Buscar nombre o email...'
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className='pl-10'
+          />
         </div>
-      </section>
+      </div>
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <section className='bg-surface-container-lowest rounded-[2rem] shadow-kinetic overflow-hidden'>
         <Table>
           <TableHeader>
             <TableRow className='bg-surface-container-low/50 hover:bg-surface-container-low/50 border-none'>
-              <TableHead>Usuario</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Proveedor</TableHead>
-              <TableHead>Registrado</TableHead>
+              <TableHead>Suscriptor</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead>Plan</TableHead>
+              <TableHead>Pasarela</TableHead>
+              <TableHead>Vencimiento</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -189,64 +298,122 @@ export default function SuscriptoresPage() {
               Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
             ) : error ? (
               <TableRow className='hover:bg-transparent'>
-                <TableCell colSpan={4} className='py-16 text-center'>
-                  <p className='font-body font-semibold text-sm text-error'>{error}</p>
+                <TableCell colSpan={5} className='py-16 text-center'>
+                  <p className='font-body font-semibold text-sm text-destructive'>{error}</p>
                 </TableCell>
               </TableRow>
             ) : paged.length === 0 ? (
               <TableRow className='hover:bg-transparent'>
-                <TableCell colSpan={4} className='py-16 text-center'>
+                <TableCell colSpan={5} className='py-16 text-center'>
                   <div className='flex flex-col items-center gap-3 text-on-surface-variant'>
                     <Users className='h-10 w-10 opacity-30' />
                     <p className='font-body font-semibold text-sm'>
-                      {search ? 'Sin resultados para esa búsqueda' : 'Aún no hay suscriptores'}
+                      {search ? 'Sin resultados para esa búsqueda' : 'Aún no hay suscripciones'}
                     </p>
                   </div>
                 </TableCell>
               </TableRow>
             ) : (
-              paged.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className='flex items-center gap-4'>
-                      {user.image ? (
-                        <img
-                          src={user.image}
-                          alt={user.name}
-                          className='w-12 h-12 rounded-2xl object-cover shrink-0 shadow-sm'
-                        />
-                      ) : (
-                        <div className='w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center shrink-0'>
-                          <span className='font-headline font-black text-sm text-on-surface-variant'>
-                            {getInitials(user.name)}
+              paged.map((sub) => {
+                const latestPayment = sub.payments[0] ?? null;
+                const statusCfg = STATUS_CONFIG[sub.status];
+                const expiring = sub.status === 'ACTIVE' && isExpiringSoon(sub.endDate);
+
+                return (
+                  <TableRow key={sub.id}>
+
+                    {/* Suscriptor */}
+                    <TableCell>
+                      <div className='flex items-center gap-4'>
+                        {sub.user.image ? (
+                          <img
+                            src={sub.user.image}
+                            alt={sub.user.name}
+                            className='w-12 h-12 rounded-2xl object-cover shrink-0 shadow-sm'
+                          />
+                        ) : (
+                          <div className='w-12 h-12 rounded-2xl bg-primary/[0.08] flex items-center justify-center shrink-0'>
+                            <span className='font-headline font-black text-sm text-primary'>
+                              {getInitials(sub.user.name)}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <p className='font-body font-bold text-on-surface'>{sub.user.name}</p>
+                          <p className='text-xs font-body font-medium text-on-surface-variant'>
+                            {sub.user.email}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    {/* Estado */}
+                    <TableCell>
+                      <div className='flex flex-col gap-1'>
+                        <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                        {expiring && (
+                          <span className='text-[10px] font-body font-bold text-amber-600 flex items-center gap-1'>
+                            <Clock className='h-3 w-3' />
+                            Vence pronto
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+
+                    {/* Plan */}
+                    <TableCell>
+                      <p className='font-body font-bold text-sm text-on-surface'>{sub.plan.name}</p>
+                      <p className='text-xs font-body font-medium text-on-surface-variant'>
+                        {sub.plan.billingPeriod === 'MONTHLY' ? 'Mensual' : 'Anual'}
+                        {' · '}
+                        {latestPayment
+                          ? `${latestPayment.currency} ${Number(latestPayment.amount).toLocaleString('es-AR')}`
+                          : `ARS ${Number(sub.plan.priceArs).toLocaleString('es-AR')}`
+                        }
+                      </p>
+                    </TableCell>
+
+                    {/* Pasarela */}
+                    <TableCell>
+                      {latestPayment ? (
+                        <div className='flex items-center gap-2'>
+                          <CreditCard className='h-4 w-4 text-on-surface-variant shrink-0' />
+                          <span className='text-sm font-body font-medium text-on-surface-variant'>
+                            {GATEWAY_LABEL[latestPayment.gateway]}
                           </span>
                         </div>
+                      ) : (
+                        <span className='text-sm font-body text-on-surface-variant/50'>—</span>
                       )}
-                      <p className='font-body font-bold text-on-surface'>{user.name}</p>
-                    </div>
-                  </TableCell>
+                    </TableCell>
 
-                  <TableCell className='text-sm font-body font-medium text-on-surface-variant'>
-                    {user.email}
-                  </TableCell>
-
-                  <TableCell>
-                    <Badge variant='neutral'>{user.provider}</Badge>
-                  </TableCell>
-
-                  <TableCell className='text-sm font-body font-medium text-on-surface-variant'>
-                    {formatDate(user.createdAt)}
-                  </TableCell>
-                </TableRow>
-              ))
+                    {/* Vencimiento */}
+                    <TableCell>
+                      {sub.status === 'ACTIVE' ? (
+                        <span className={`text-sm font-body font-semibold ${expiring ? 'text-amber-600' : 'text-on-surface-variant'}`}>
+                          {formatDate(sub.endDate)}
+                        </span>
+                      ) : sub.status === 'CANCELLED' ? (
+                        <span className='text-sm font-body text-on-surface-variant/60'>
+                          Canceló {formatDate(sub.cancelledAt)}
+                        </span>
+                      ) : (
+                        <span className='text-sm font-body text-on-surface-variant'>
+                          {formatDate(sub.endDate)}
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
 
-        {/* Footer */}
+        {/* Table footer */}
         <div className='bg-surface-container-highest px-8 py-4 flex items-center justify-between'>
           <p className='text-sm font-body font-semibold text-on-surface-variant'>
-            Mostrando {paged.length} de {filtered.length.toLocaleString('es-AR')} suscriptores
+            {loading ? '...' : `${filtered.length} suscripción${filtered.length !== 1 ? 'es' : ''}`}
           </p>
 
           {totalPages > 1 && (
@@ -289,20 +456,17 @@ export default function SuscriptoresPage() {
         </div>
       </section>
 
-      {/* ── Bottom card ─────────────────────────────────────────────────── */}
-      <div className='bg-secondary-container p-8 rounded-[2rem] text-on-secondary-container flex items-center gap-6 border-2 border-dashed border-primary/20 pb-10'>
-        <div>
-          <h4 className='text-xl font-headline font-black mb-2'>Exportar base</h4>
-          <p className='text-sm font-body font-medium leading-relaxed mb-4'>
-            Descargá el listado completo de suscriptores para auditoría o análisis externo.
-          </p>
-          <Button
-            size='sm'
-            className='bg-on-secondary-container text-white hover:bg-black rounded-full text-xs font-body font-black uppercase tracking-widest'
-          >
-            <Download className='h-3.5 w-3.5' />
-            Descargar CSV
-          </Button>
+      {/* ── Tip card ────────────────────────────────────────────────────── */}
+      <div className='bg-primary p-8 rounded-[2rem] text-on-primary relative overflow-hidden group'>
+        <div className='absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl group-hover:scale-150 transition-transform duration-700' />
+        <div className='relative z-10 flex items-start gap-4'>
+          <Zap className='h-6 w-6 shrink-0 mt-0.5 fill-on-primary/20' />
+          <div>
+            <h4 className='text-xl font-headline font-black mb-1'>Sobre las membresías</h4>
+            <p className='text-on-primary/80 font-body text-sm leading-relaxed'>
+              Las suscripciones <strong>Pendientes</strong> son pagos iniciados pero no confirmados — se activan automáticamente cuando el pago es aprobado por la pasarela. Las <strong>vencidas</strong> perdieron acceso al dashboard de suscriptor.
+            </p>
+          </div>
         </div>
       </div>
     </div>
