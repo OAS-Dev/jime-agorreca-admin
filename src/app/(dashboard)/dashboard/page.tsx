@@ -15,6 +15,14 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 // ── Static mock data ──────────────────────────────────────────────────────────
 
@@ -87,9 +95,13 @@ export default async function DashboardPage() {
 
         <div className='flex items-center gap-3'>
           {/* Notification bell */}
-          <button className='w-11 h-11 flex items-center justify-center rounded-full bg-surface-container-lowest shadow-kinetic hover:bg-surface-container-high transition-colors'>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='w-11 h-11 rounded-full bg-surface-container-lowest shadow-kinetic hover:bg-surface-container-high'
+          >
             <Bell className='h-5 w-5 text-on-surface-variant' />
-          </button>
+          </Button>
 
           {/* User avatar */}
           <div className='w-11 h-11 rounded-full bg-primary flex items-center justify-center shadow-kinetic-primary'>
@@ -163,56 +175,46 @@ export default async function DashboardPage() {
               <h3 className='text-lg font-headline font-bold text-on-surface'>
                 Actividad Reciente
               </h3>
-              <button className='text-primary text-sm font-body font-bold hover:text-primary/80 transition-colors flex items-center gap-1'>
+              <Button variant='ghost' size='sm' className='text-primary hover:text-primary/80 hover:bg-transparent font-body font-bold'>
                 Ver todo
                 <ChevronRight className='h-4 w-4' />
-              </button>
+              </Button>
             </div>
 
-            <div className='overflow-x-auto'>
-              <table className='w-full text-left'>
-                <thead className='bg-surface-container-low'>
-                  <tr>
-                    {['Usuario', 'Acción', 'Fecha', 'Estado'].map((h) => (
-                      <th
-                        key={h}
-                        className='px-8 py-4 text-[10px] font-body font-bold text-on-surface-variant uppercase tracking-wider'
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentActivity.map((row) => (
-                    <tr
-                      key={row.id}
-                      className='hover:bg-surface-container/50 transition-colors'
-                    >
-                      <td className='px-8 py-5'>
-                        <div className='flex items-center gap-3'>
-                          <div className='w-8 h-8 rounded-full bg-primary/[0.08] flex items-center justify-center text-primary font-headline font-bold text-xs shrink-0'>
-                            {row.initials}
-                          </div>
-                          <span className='font-body font-bold text-sm text-on-surface'>
-                            {row.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className='px-8 py-5 text-sm font-body text-on-surface-variant'>
-                        {row.action}
-                      </td>
-                      <td className='px-8 py-5 text-sm font-body text-on-surface-variant'>
-                        {row.date}
-                      </td>
-                      <td className='px-8 py-5'>
-                        <Badge variant={row.status}>{row.statusLabel}</Badge>
-                      </td>
-                    </tr>
+            <Table>
+              <TableHeader>
+                <TableRow className='bg-surface-container-low hover:bg-surface-container-low border-none'>
+                  {['Usuario', 'Acción', 'Fecha', 'Estado'].map((h) => (
+                    <TableHead key={h}>{h}</TableHead>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentActivity.map((row) => (
+                  <TableRow key={row.id} className='hover:bg-surface-container/50'>
+                    <TableCell>
+                      <div className='flex items-center gap-3'>
+                        <div className='w-8 h-8 rounded-full bg-primary/[0.08] flex items-center justify-center text-primary font-headline font-bold text-xs shrink-0'>
+                          {row.initials}
+                        </div>
+                        <span className='font-body font-bold text-sm text-on-surface'>
+                          {row.name}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className='text-sm font-body text-on-surface-variant'>
+                      {row.action}
+                    </TableCell>
+                    <TableCell className='text-sm font-body text-on-surface-variant'>
+                      {row.date}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={row.status}>{row.statusLabel}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </section>
         </div>
 
@@ -287,9 +289,12 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── FAB ────────────────────────────────────────────────────────── */}
-      <button className='fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full shadow-kinetic-primary flex items-center justify-center hover:scale-110 active:scale-90 transition-all duration-200 z-50'>
+      <Button
+        size='icon'
+        className='fixed bottom-8 right-8 w-14 h-14 rounded-full shadow-kinetic-primary hover:scale-110 active:scale-90 z-50'
+      >
         <Plus className='h-6 w-6 stroke-[2.5]' />
-      </button>
+      </Button>
     </div>
   );
 }

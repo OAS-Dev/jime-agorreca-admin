@@ -3,10 +3,16 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { LayoutDashboard, ShieldCheck, Users, HelpCircle, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShieldCheck, Users, HelpCircle, LogOut, FileText, PenLine, BookOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const mainItems = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
+];
+
+const blogItems = [
+  { href: '/blog',        label: 'Notas',         icon: FileText },
+  { href: '/blog/nuevo',  label: 'Nueva nota',    icon: PenLine },
 ];
 
 const userItems = [
@@ -73,6 +79,22 @@ export function Sidebar() {
           />
         ))}
 
+        {/* Sección Blog */}
+        <div className='pt-4'>
+          <p className='px-4 pb-2 text-[10px] font-body font-black uppercase tracking-widest text-on-surface-variant/50'>
+            Blog
+          </p>
+          {blogItems.map(({ href, label, icon }) => (
+            <NavItem
+              key={href}
+              href={href}
+              label={label}
+              icon={icon}
+              active={href === '/blog' ? pathname === '/blog' : pathname.startsWith(href)}
+            />
+          ))}
+        </div>
+
         {/* Sección Usuarios */}
         <div className='pt-4'>
           <p className='px-4 pb-2 text-[10px] font-body font-black uppercase tracking-widest text-on-surface-variant/50'>
@@ -96,18 +118,19 @@ export function Sidebar() {
           <p className='text-[10px] font-body font-bold text-on-surface-variant uppercase tracking-widest mb-2'>
             Soporte
           </p>
-          <button className='w-full text-left text-sm font-body font-semibold text-primary flex items-center gap-2 hover:text-primary/80 transition-colors'>
+          <Button variant='ghost' size='sm' className='w-full justify-start text-primary hover:text-primary/80 hover:bg-transparent font-body font-semibold px-0'>
             <HelpCircle className='h-4 w-4' />
             Centro de Ayuda
-          </button>
+          </Button>
         </div>
-        <button
+        <Button
+          variant='ghost'
           onClick={() => signOut({ callbackUrl: '/login' })}
-          className='w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-body font-semibold text-on-surface-variant hover:bg-destructive/[0.06] hover:text-destructive transition-all duration-150'
+          className='w-full justify-start px-4 font-body font-semibold text-on-surface-variant hover:bg-destructive/[0.06] hover:text-destructive'
         >
           <LogOut className='h-4 w-4' />
           Cerrar sesión
-        </button>
+        </Button>
       </div>
     </aside>
   );

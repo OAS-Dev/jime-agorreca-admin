@@ -19,6 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -125,13 +128,13 @@ export default function SuscriptoresPage() {
 
       {/* ── Search bar ──────────────────────────────────────────────────── */}
       <div className='relative w-full max-w-md group'>
-        <Search className='absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant group-focus-within:text-primary transition-colors' />
-        <input
+        <Search className='absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant group-focus-within:text-primary transition-colors pointer-events-none z-10' />
+        <Input
           type='text'
           placeholder='Buscar por nombre o email...'
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className='w-full pl-10 pr-4 py-2.5 bg-surface-container-highest border-none rounded-xl text-sm font-body font-medium text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all'
+          className='pl-10 bg-surface-container-highest focus:bg-surface-container-highest focus:border-transparent'
         />
       </div>
 
@@ -228,13 +231,7 @@ export default function SuscriptoresPage() {
                   </TableCell>
 
                   <TableCell>
-                    <span className={`px-3 py-1 text-[10px] font-body font-black uppercase tracking-wider rounded-full ${
-                      user.provider === 'google'
-                        ? 'bg-surface-container-highest text-on-surface-variant'
-                        : 'bg-surface-container-high text-on-surface-variant'
-                    }`}>
-                      {user.provider}
-                    </span>
+                    <Badge variant='neutral'>{user.provider}</Badge>
                   </TableCell>
 
                   <TableCell className='text-sm font-body font-medium text-on-surface-variant'>
@@ -254,35 +251,39 @@ export default function SuscriptoresPage() {
 
           {totalPages > 1 && (
             <div className='flex items-center gap-2'>
-              <button
+              <Button
+                variant='ghost'
+                size='icon'
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className='w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors'
+                className='w-10 h-10 rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-primary'
               >
                 <ChevronLeft className='h-4 w-4' />
-              </button>
+              </Button>
 
               {visiblePages.map((p) => (
-                <button
+                <Button
                   key={p}
+                  size='icon'
+                  variant={p === page ? 'default' : 'ghost'}
                   onClick={() => setPage(p)}
-                  className={`w-10 h-10 flex items-center justify-center rounded-xl text-sm font-body font-bold transition-colors ${
-                    p === page
-                      ? 'bg-primary text-on-primary shadow-kinetic-primary'
-                      : 'bg-surface-container-lowest text-on-surface-variant hover:text-primary'
+                  className={`w-10 h-10 rounded-xl font-body font-bold ${
+                    p !== page && 'bg-surface-container-lowest text-on-surface-variant hover:text-primary'
                   }`}
                 >
                   {p}
-                </button>
+                </Button>
               ))}
 
-              <button
+              <Button
+                variant='ghost'
+                size='icon'
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className='w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors'
+                className='w-10 h-10 rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-primary'
               >
                 <ChevronRight className='h-4 w-4' />
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -295,10 +296,13 @@ export default function SuscriptoresPage() {
           <p className='text-sm font-body font-medium leading-relaxed mb-4'>
             Descargá el listado completo de suscriptores para auditoría o análisis externo.
           </p>
-          <button className='bg-on-secondary-container text-white px-6 py-2 rounded-full text-xs font-body font-black uppercase tracking-widest hover:bg-black active:scale-95 transition-all flex items-center gap-2'>
+          <Button
+            size='sm'
+            className='bg-on-secondary-container text-white hover:bg-black rounded-full text-xs font-body font-black uppercase tracking-widest'
+          >
             <Download className='h-3.5 w-3.5' />
             Descargar CSV
-          </button>
+          </Button>
         </div>
       </div>
     </div>

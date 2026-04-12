@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { ShieldCheck, UserPlus, SquarePen, Zap } from 'lucide-react';
+import { ShieldCheck, UserPlus, SquarePen, Zap, Eye, EyeOff, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import {
   Table,
@@ -12,6 +12,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +34,12 @@ interface AdminUser {
   role: 'USER' | 'ADMIN';
   provider: 'credentials' | 'google';
   createdAt: string;
+}
+
+interface CreateAdminForm {
+  name: string;
+  email: string;
+  password: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,14 +77,173 @@ function SkeletonRow() {
   );
 }
 
+// ── Modal de alta ─────────────────────────────────────────────────────────────
+
+interface CreateAdminDialogProps {
+  open: boolean;
+  token: string;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: (newAdmin: AdminUser) => void;
+}
+
+function CreateAdminDialog({ open, token, onOpenChange, onSuccess }: CreateAdminDialogProps) {
+  const [form, setForm]             = useState<CreateAdminForm>({ name: '', email: '', password: '' });
+  const [showPassword, setShowPass] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+
+  // Limpiar estado al cerrar
+  useEffect(() => {
+    if (!open) {
+      setForm({ name: '', email: '', password: '' });
+      setShowPass(false);
+      setError(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      // 1. Registrar el usuario (endpoint público)
+      const { data: registered } = await api.post<{ user: AdminUser }>('/auth/register', {
+        name:     form.name.trim(),
+        email:    form.email.trim().toLowerCase(),
+        password: form.password,
+      });
+
+      // 2. Promover a ADMIN con el token del admin logueado
+      const { data: promoted } = await api.patch<AdminUser>(
+        `/users/${registered.user.id}/role`,
+        { role: 'ADMIN' },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      onSuccess(promoted);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Ocurrió un error. Intentá de nuevo.';
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nuevo administrador</DialogTitle>
+          <DialogDescription>
+            Creá la cuenta y asignale acceso al panel.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className='px-8 pb-8 space-y-5'>
+
+          {/* Nombre */}
+          <div className='space-y-2'>
+            <Label htmlFor='admin-name'>Nombre completo</Label>
+            <Input
+              id='admin-name'
+              type='text'
+              autoFocus
+              required
+              minLength={2}
+              placeholder='Ej: María García'
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+
+          {/* Email */}
+          <div className='space-y-2'>
+            <Label htmlFor='admin-email'>Email</Label>
+            <Input
+              id='admin-email'
+              type='email'
+              required
+              placeholder='admin@ejemplo.com'
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+
+          {/* Contraseña */}
+          <div className='space-y-2'>
+            <Label htmlFor='admin-password'>Contraseña</Label>
+            <div className='relative'>
+              <Input
+                id='admin-password'
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={8}
+                placeholder='Mínimo 8 caracteres'
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                className='pr-12'
+              />
+              <button
+                type='button'
+                onClick={() => setShowPass((s) => !s)}
+                className='absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-on-surface-variant hover:text-on-surface active:scale-90 transition-all rounded-lg'
+              >
+                {showPassword ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
+              </button>
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <p className='text-sm font-body font-semibold text-destructive bg-destructive/10 rounded-2xl px-4 py-3'>
+              {error}
+            </p>
+          )}
+
+          <div className='flex gap-3 pt-2'>
+            <Button
+              type='button'
+              variant='ghost'
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+              className='flex-1 bg-surface-container-high text-on-surface hover:bg-surface-container-highest hover:text-on-surface'
+            >
+              Cancelar
+            </Button>
+            <Button
+              type='submit'
+              disabled={submitting}
+              className='flex-1'
+            >
+              {submitting ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <>
+                  <ShieldCheck className='h-4 w-4' />
+                  Crear admin
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function EquipoPage() {
   const { data: session } = useSession();
 
-  const [admins, setAdmins]   = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
+  const [admins, setAdmins]       = useState<AdminUser[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     if (!session?.backendToken) return;
@@ -88,8 +264,23 @@ export default function EquipoPage() {
       .finally(() => setLoading(false));
   }, [session?.backendToken]);
 
+  const handleAdminCreated = (newAdmin: AdminUser) => {
+    setAdmins((prev) => [...prev, newAdmin]);
+    setModalOpen(false);
+  };
+
   return (
     <div className='p-8 max-w-5xl mx-auto space-y-10'>
+
+      {/* Dialog */}
+      {session?.backendToken && (
+        <CreateAdminDialog
+          open={modalOpen}
+          token={session.backendToken}
+          onOpenChange={setModalOpen}
+          onSuccess={handleAdminCreated}
+        />
+      )}
 
       {/* ── Page header + metric ────────────────────────────────────────── */}
       <section className='grid grid-cols-1 md:grid-cols-3 gap-8 items-end'>
@@ -126,10 +317,10 @@ export default function EquipoPage() {
 
       {/* ── Action bar ──────────────────────────────────────────────────── */}
       <div className='flex justify-end'>
-        <button className='flex items-center gap-2 bg-primary text-on-primary px-8 py-3 rounded-full font-headline font-bold shadow-kinetic-primary hover:opacity-90 active:scale-95 transition-all'>
+        <Button onClick={() => setModalOpen(true)} size='lg'>
           <UserPlus className='h-4 w-4' />
           Agregar Admin
-        </button>
+        </Button>
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
@@ -150,7 +341,7 @@ export default function EquipoPage() {
             ) : error ? (
               <TableRow className='hover:bg-transparent'>
                 <TableCell colSpan={4} className='py-16 text-center'>
-                  <p className='font-body font-semibold text-sm text-error'>{error}</p>
+                  <p className='font-body font-semibold text-sm text-destructive'>{error}</p>
                 </TableCell>
               </TableRow>
             ) : admins.length === 0 ? (
@@ -182,9 +373,7 @@ export default function EquipoPage() {
                       )}
                       <div>
                         <p className='font-body font-bold text-on-surface'>{user.name}</p>
-                        <span className='px-2 py-0.5 text-[10px] font-body font-black uppercase tracking-wider rounded-full bg-secondary-container text-on-secondary-container'>
-                          Admin
-                        </span>
+                        <Badge variant='warning'>Admin</Badge>
                       </div>
                     </div>
                   </TableCell>
@@ -198,9 +387,9 @@ export default function EquipoPage() {
                   </TableCell>
 
                   <TableCell className='text-right'>
-                    <button className='p-2 hover:bg-surface-container-highest rounded-xl text-on-surface-variant active:scale-90 transition-all'>
+                    <Button variant='ghost' size='icon' className='rounded-xl text-on-surface-variant'>
                       <SquarePen className='h-5 w-5' />
-                    </button>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))

@@ -160,12 +160,14 @@ export default function LoginPage() {
             <div className='space-y-2'>
               <div className='flex items-center justify-between'>
                 <Label htmlFor='password'>Contraseña</Label>
-                <button
+                <Button
                   type='button'
-                  className='text-xs font-body font-bold text-primary hover:text-primary/80 transition-colors uppercase tracking-wide'
+                  variant='link'
+                  size='sm'
+                  className='h-auto p-0 text-xs font-body font-bold uppercase tracking-wide text-primary'
                 >
                   ¿Olvidaste la clave?
-                </button>
+                </Button>
               </div>
               <div className='relative'>
                 <Input
