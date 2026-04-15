@@ -1,5 +1,7 @@
 import PostForm from '@/components/admin/PostForm';
 
-export default function NuevaNotaPage() {
+const NuevaNotaPage = () => {
   return <PostForm mode='create' />;
 }
+
+export default NuevaNotaPage;

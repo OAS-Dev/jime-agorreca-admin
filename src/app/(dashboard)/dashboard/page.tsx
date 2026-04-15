@@ -48,10 +48,10 @@ interface Metric {
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
-async function fetchActivity(token: string): Promise<{
+const fetchActivity = async (token: string): Promise<{
   activity: ActivityItem[];
   metrics: Metric[];
-}> {
+}> => {
   const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -153,7 +153,7 @@ async function fetchActivity(token: string): Promise<{
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatRelative(iso: string): string {
+const formatRelative = (iso: string): string => {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return `Hace ${mins} min`;
@@ -165,13 +165,13 @@ function formatRelative(iso: string): string {
   return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 }
 
-function getInitials(name: string) {
+const getInitials = (name: string) => {
   return name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase();
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default async function DashboardPage() {
+const DashboardPage = async () => {
   const session = await getServerSession(authOptions);
   const firstName = session?.user?.name?.split(' ')[0] ?? 'Admin';
   const userInitials = session?.user?.name ? getInitials(session.user.name) : 'AD';
@@ -418,9 +418,11 @@ export default async function DashboardPage() {
 
 // ── Fallback ──────────────────────────────────────────────────────────────────
 
-function defaultMetrics(): Metric[] {
+const defaultMetrics = (): Metric[] => {
   return [
     { label: 'Suscriptores activos', value: '—', percent: 0, colorClass: 'bg-primary' },
     { label: 'Usuarios registrados', value: '—', percent: 0, colorClass: 'bg-on-surface' },
   ];
 }
+
+export default DashboardPage;

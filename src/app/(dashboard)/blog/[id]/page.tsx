@@ -19,7 +19,7 @@ interface RawPost {
   tags: string[];
 }
 
-export default function EditarNotaPage() {
+const EditarNotaPage = () => {
   const { id } = useParams<{ id: string }>();
   const { data: session } = useSession();
 
@@ -70,3 +70,5 @@ export default function EditarNotaPage() {
 
   return <PostForm mode='edit' postId={id} initialData={initialData} />;
 }
+
+export default EditarNotaPage;

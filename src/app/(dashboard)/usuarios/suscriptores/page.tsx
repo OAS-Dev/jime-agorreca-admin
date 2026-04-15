@@ -12,6 +12,8 @@ import {
   XCircle,
   CreditCard,
   Zap,
+  Mail,
+  Hash,
 } from 'lucide-react';
 import api from '@/lib/api';
 import {
@@ -51,6 +53,7 @@ interface Subscription {
     name: string;
     email: string;
     image: string | null;
+    isActivated: boolean;
   };
   payments: {
     id: string;
@@ -58,6 +61,9 @@ interface Subscription {
     status: PaymentStatus;
     amount: string;
     currency: string;
+    gatewayPaymentId: string | null;
+    payerEmail: string | null;
+    payerName: string | null;
     createdAt: string;
   }[];
 }
@@ -66,11 +72,11 @@ type FilterTab = 'ALL' | SubscriptionStatus;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getInitials(name: string) {
+const getInitials = (name: string) => {
   return name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase();
 }
 
-function formatDate(iso: string | null) {
+const formatDate = (iso: string | null) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('es-AR', {
     day: 'numeric',
@@ -79,7 +85,7 @@ function formatDate(iso: string | null) {
   });
 }
 
-function isExpiringSoon(endDate: string | null): boolean {
+const isExpiringSoon = (endDate: string | null): boolean => {
   if (!endDate) return false;
   const days = (new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
   return days > 0 && days <= 7;
@@ -109,7 +115,7 @@ const PAGE_SIZE = 10;
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-function SkeletonRow() {
+const SkeletonRow = () => {
   return (
     <TableRow className='animate-pulse hover:bg-transparent'>
       <TableCell>
@@ -125,13 +131,14 @@ function SkeletonRow() {
       <TableCell><div className='h-3.5 w-28 bg-surface-container-high rounded-full' /></TableCell>
       <TableCell><div className='h-3.5 w-24 bg-surface-container-high rounded-full' /></TableCell>
       <TableCell><div className='h-3.5 w-20 bg-surface-container-high rounded-full' /></TableCell>
+      <TableCell><div className='h-3.5 w-20 bg-surface-container-high rounded-full' /></TableCell>
     </TableRow>
   );
 }
 
 // ── Metric card ───────────────────────────────────────────────────────────────
 
-function MetricCard({
+const MetricCard = ({
   label,
   value,
   icon: Icon,
@@ -143,7 +150,7 @@ function MetricCard({
   icon: React.ElementType;
   loading: boolean;
   accent?: string;
-}) {
+}) => {
   return (
     <div className='bg-surface-container-lowest p-6 rounded-2xl shadow-kinetic flex items-center justify-between relative overflow-hidden group'>
       <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl transition-all ${accent ?? 'bg-primary/10 group-hover:bg-primary/20'}`} />
@@ -167,15 +174,35 @@ function MetricCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function SuscriptoresPage() {
+const SuscriptoresPage = () => {
   const { data: session } = useSession();
 
-  const [subs, setSubs]       = useState<Subscription[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [search, setSearch]   = useState('');
-  const [filter, setFilter]   = useState<FilterTab>('ALL');
-  const [page, setPage]       = useState(1);
+  const [subs, setSubs]             = useState<Subscription[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [search, setSearch]         = useState('');
+  const [filter, setFilter]         = useState<FilterTab>('ALL');
+  const [page, setPage]             = useState(1);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resentId, setResentId]     = useState<string | null>(null);
+
+  const handleResendActivation = async (email: string, subId: string) => {
+    setResendingId(subId);
+    setResentId(null);
+    try {
+      await api.post(
+        '/auth/resend-activation',
+        { email },
+        { headers: { Authorization: `Bearer ${session?.backendToken}` } },
+      );
+      setResentId(subId);
+      setTimeout(() => setResentId(null), 3000);
+    } catch {
+      // silencioso — el endpoint siempre responde 200
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!session?.backendToken) return;
@@ -288,8 +315,9 @@ export default function SuscriptoresPage() {
               <TableHead>Suscriptor</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Plan</TableHead>
-              <TableHead>Pasarela</TableHead>
+              <TableHead>Pago MP</TableHead>
               <TableHead>Vencimiento</TableHead>
+              <TableHead>Acciones</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -298,13 +326,13 @@ export default function SuscriptoresPage() {
               Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
             ) : error ? (
               <TableRow className='hover:bg-transparent'>
-                <TableCell colSpan={5} className='py-16 text-center'>
+                <TableCell colSpan={6} className='py-16 text-center'>
                   <p className='font-body font-semibold text-sm text-destructive'>{error}</p>
                 </TableCell>
               </TableRow>
             ) : paged.length === 0 ? (
               <TableRow className='hover:bg-transparent'>
-                <TableCell colSpan={5} className='py-16 text-center'>
+                <TableCell colSpan={6} className='py-16 text-center'>
                   <div className='flex flex-col items-center gap-3 text-on-surface-variant'>
                     <Users className='h-10 w-10 opacity-30' />
                     <p className='font-body font-semibold text-sm'>
@@ -373,14 +401,32 @@ export default function SuscriptoresPage() {
                       </p>
                     </TableCell>
 
-                    {/* Pasarela */}
+                    {/* Pago MP */}
                     <TableCell>
                       {latestPayment ? (
-                        <div className='flex items-center gap-2'>
-                          <CreditCard className='h-4 w-4 text-on-surface-variant shrink-0' />
-                          <span className='text-sm font-body font-medium text-on-surface-variant'>
-                            {GATEWAY_LABEL[latestPayment.gateway]}
-                          </span>
+                        <div className='space-y-1 min-w-[160px]'>
+                          <div className='flex items-center gap-1.5'>
+                            <CreditCard className='h-3.5 w-3.5 text-on-surface-variant shrink-0' />
+                            <span className='text-xs font-body font-semibold text-on-surface-variant'>
+                              {GATEWAY_LABEL[latestPayment.gateway]}
+                            </span>
+                          </div>
+                          {latestPayment.payerEmail && (
+                            <div className='flex items-center gap-1.5'>
+                              <Mail className='h-3.5 w-3.5 text-on-surface-variant/60 shrink-0' />
+                              <span className='text-xs font-body text-on-surface-variant truncate max-w-[140px]'>
+                                {latestPayment.payerEmail}
+                              </span>
+                            </div>
+                          )}
+                          {latestPayment.gatewayPaymentId && (
+                            <div className='flex items-center gap-1.5'>
+                              <Hash className='h-3.5 w-3.5 text-on-surface-variant/60 shrink-0' />
+                              <span className='text-xs font-body text-on-surface-variant/70 font-mono'>
+                                {latestPayment.gatewayPaymentId}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className='text-sm font-body text-on-surface-variant/50'>—</span>
@@ -401,6 +447,27 @@ export default function SuscriptoresPage() {
                         <span className='text-sm font-body text-on-surface-variant'>
                           {formatDate(sub.endDate)}
                         </span>
+                      )}
+                    </TableCell>
+
+                    {/* Acciones */}
+                    <TableCell>
+                      {!sub.user.isActivated && (
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          className='text-xs font-body font-bold gap-1.5 whitespace-nowrap'
+                          disabled={resendingId === sub.id}
+                          onClick={() => handleResendActivation(sub.user.email, sub.id)}
+                        >
+                          <Mail className='h-3.5 w-3.5' />
+                          {resentId === sub.id
+                            ? '¡Enviado!'
+                            : resendingId === sub.id
+                              ? 'Enviando...'
+                              : 'Reenviar activación'
+                          }
+                        </Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -472,3 +539,5 @@ export default function SuscriptoresPage() {
     </div>
   );
 }
+
+export default SuscriptoresPage;

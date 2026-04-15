@@ -44,11 +44,11 @@ interface CreateAdminForm {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getInitials(name: string) {
+const getInitials = (name: string) => {
   return name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase();
 }
 
-function formatDate(iso: string) {
+const formatDate = (iso: string) => {
   return new Date(iso).toLocaleDateString('es-AR', {
     day: 'numeric',
     month: 'short',
@@ -58,7 +58,7 @@ function formatDate(iso: string) {
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-function SkeletonRow() {
+const SkeletonRow = () => {
   return (
     <TableRow className='animate-pulse hover:bg-transparent'>
       <TableCell>
@@ -86,7 +86,7 @@ interface CreateAdminDialogProps {
   onSuccess: (newAdmin: AdminUser) => void;
 }
 
-function CreateAdminDialog({ open, token, onOpenChange, onSuccess }: CreateAdminDialogProps) {
+const CreateAdminDialog = ({ open, token, onOpenChange, onSuccess }: CreateAdminDialogProps) => {
   const [form, setForm]             = useState<CreateAdminForm>({ name: '', email: '', password: '' });
   const [showPassword, setShowPass] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -237,7 +237,7 @@ function CreateAdminDialog({ open, token, onOpenChange, onSuccess }: CreateAdmin
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function EquipoPage() {
+const EquipoPage = () => {
   const { data: session } = useSession();
 
   const [admins, setAdmins]       = useState<AdminUser[]>([]);
@@ -420,3 +420,5 @@ export default function EquipoPage() {
     </div>
   );
 }
+
+export default EquipoPage;

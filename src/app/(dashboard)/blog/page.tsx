@@ -54,7 +54,7 @@ interface PostSummary {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string) {
+const formatDate = (iso: string) => {
   return new Date(iso).toLocaleDateString('es-AR', {
     day: 'numeric',
     month: 'short',
@@ -80,7 +80,7 @@ const statusBadge = (status: PostStatus) => {
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-function SkeletonRow() {
+const SkeletonRow = () => {
   return (
     <TableRow className='animate-pulse hover:bg-transparent'>
       <TableCell>
@@ -109,7 +109,7 @@ interface DeleteDialogProps {
   onDeleted: (id: string) => void;
 }
 
-function DeleteDialog({ post, token, onClose, onDeleted }: DeleteDialogProps) {
+const DeleteDialog = ({ post, token, onClose, onDeleted }: DeleteDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -175,7 +175,7 @@ function DeleteDialog({ post, token, onClose, onDeleted }: DeleteDialogProps) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function BlogPage() {
+const BlogPage = () => {
   const { data: session } = useSession();
 
   const [posts, setPosts] = useState<PostSummary[]>([]);
@@ -412,3 +412,5 @@ export default function BlogPage() {
     </div>
   );
 }
+
+export default BlogPage;

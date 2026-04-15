@@ -20,7 +20,7 @@ const userItems = [
   { href: '/usuarios/suscriptores',  label: 'Suscriptores',  icon: Users },
 ];
 
-function NavItem({
+const NavItem = ({
   href,
   label,
   icon: Icon,
@@ -30,7 +30,7 @@ function NavItem({
   label: string;
   icon: React.ElementType;
   active: boolean;
-}) {
+}) => {
   return (
     <Link
       href={href}
@@ -46,7 +46,7 @@ function NavItem({
   );
 }
 
-export function Sidebar() {
+export const Sidebar = () => {
   const pathname = usePathname();
 
   return (

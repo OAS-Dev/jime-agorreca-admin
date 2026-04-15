@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 
-export default function UsuariosPage() {
+const UsuariosPage = () => {
   redirect('/usuarios/equipo');
 }
+
+export default UsuariosPage;

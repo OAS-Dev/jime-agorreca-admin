@@ -55,7 +55,7 @@ const slugify = (text: string) =>
 
 // ── Tags input ────────────────────────────────────────────────────────────────
 
-function TagsInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+const TagsInput = ({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) => {
   const [input, setInput] = useState('');
 
   const addTag = (value: string) => {
@@ -105,7 +105,7 @@ function TagsInput({ tags, onChange }: { tags: string[]; onChange: (tags: string
 
 // ── PostForm ──────────────────────────────────────────────────────────────────
 
-export default function PostForm({ mode, postId, initialData }: PostFormProps) {
+const PostForm = ({ mode, postId, initialData }: PostFormProps) => {
   const { data: session } = useSession();
   const router = useRouter();
 
@@ -407,3 +407,5 @@ export default function PostForm({ mode, postId, initialData }: PostFormProps) {
     </form>
   );
 }
+
+export default PostForm;
