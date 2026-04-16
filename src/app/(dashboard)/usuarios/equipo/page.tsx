@@ -270,7 +270,7 @@ const EquipoPage = () => {
   };
 
   return (
-    <div className='p-8 max-w-5xl mx-auto space-y-10'>
+    <div className='p-10 xl:p-12 space-y-10'>
 
       {/* Dialog */}
       {session?.backendToken && (

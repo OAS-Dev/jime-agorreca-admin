@@ -254,7 +254,7 @@ const SuscriptoresPage = () => {
   const expiredCount   = subs.filter((s) => s.status === 'EXPIRED' || s.status === 'CANCELLED').length;
 
   return (
-    <div className='p-8 max-w-6xl mx-auto space-y-10'>
+    <div className='p-10 xl:p-12 space-y-10'>
 
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className='space-y-1'>
@@ -404,7 +404,7 @@ const SuscriptoresPage = () => {
                     {/* Pago MP */}
                     <TableCell>
                       {latestPayment ? (
-                        <div className='space-y-1 min-w-[160px]'>
+                        <div className='space-y-1'>
                           <div className='flex items-center gap-1.5'>
                             <CreditCard className='h-3.5 w-3.5 text-on-surface-variant shrink-0' />
                             <span className='text-xs font-body font-semibold text-on-surface-variant'>
@@ -414,7 +414,7 @@ const SuscriptoresPage = () => {
                           {latestPayment.payerEmail && (
                             <div className='flex items-center gap-1.5'>
                               <Mail className='h-3.5 w-3.5 text-on-surface-variant/60 shrink-0' />
-                              <span className='text-xs font-body text-on-surface-variant truncate max-w-[140px]'>
+                              <span className='text-xs font-body text-on-surface-variant truncate block max-w-full'>
                                 {latestPayment.payerEmail}
                               </span>
                             </div>
@@ -456,7 +456,7 @@ const SuscriptoresPage = () => {
                         <Button
                           size='sm'
                           variant='outline'
-                          className='text-xs font-body font-bold gap-1.5 whitespace-nowrap'
+                          className='text-xs font-body font-bold gap-1.5'
                           disabled={resendingId === sub.id}
                           onClick={() => handleResendActivation(sub.user.email, sub.id)}
                         >
