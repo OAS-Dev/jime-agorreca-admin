@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { ArrowLeft, Globe, Lock, Loader2, Link2, Tag, ImageIcon } from 'lucide-react'
+import { ArrowLeft, Globe, Lock, Loader2, Link2, Tag, ImageIcon, UploadCloud } from 'lucide-react'
 import Link from 'next/link'
 import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -101,6 +100,175 @@ const TagsInput = ({ tags, onChange }: { tags: string[]; onChange: (tags: string
         placeholder={tags.length === 0 ? 'Escribí un tag y presioná Enter' : ''}
         className="min-w-[120px] flex-1 bg-transparent font-body text-sm font-medium text-on-surface outline-none placeholder:text-on-surface-variant/50"
       />
+    </div>
+  )
+}
+
+// ── CoverImageUpload ──────────────────────────────────────────────────────────
+
+interface CoverImageUploadProps {
+  value: string
+  onChange: (url: string) => void
+  backendToken: string
+}
+
+const CoverImageUpload = ({ value, onChange, backendToken }: CoverImageUploadProps) => {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUpload = useCallback(
+    async (file: File) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+      if (!allowed.includes(file.type)) {
+        setError('Solo se permiten imágenes JPG, PNG, WebP o GIF.')
+        return
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError('La imagen no puede superar los 5MB.')
+        return
+      }
+
+      setError(null)
+      setUploading(true)
+
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}/upload/image?folder=posts`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${backendToken}` },
+            body: formData,
+          },
+        )
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          setError(data.message ?? 'Error al subir la imagen')
+        } else {
+          onChange(data.url)
+        }
+      } catch {
+        setError('Error al subir la imagen')
+      } finally {
+        setUploading(false)
+      }
+    },
+    [backendToken, onChange],
+  )
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleUpload(file)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleUpload(file)
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragOver(true)
+  }
+
+  const handleDragLeave = () => setDragOver(false)
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {value ? (
+        <div className="space-y-3">
+          <div className="aspect-video overflow-hidden rounded-xl">
+            <img
+              src={value}
+              alt="Cover preview"
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                ;(e.target as HTMLImageElement).style.display = 'none'
+              }}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+            >
+              Cambiar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange('')}
+              className="flex-1 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+            >
+              Quitar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => fileInputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
+          }}
+          className={[
+            'relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition-colors select-none',
+            dragOver
+              ? 'border-primary bg-primary/5'
+              : 'border-outline-variant bg-surface-container-low hover:border-primary/50 hover:bg-primary/5',
+          ].join(' ')}
+        >
+          {uploading ? (
+            <div className="flex items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            </div>
+          ) : (
+            <>
+              <UploadCloud className="h-8 w-8 text-on-surface-variant/50" />
+              <div>
+                <p className="font-body text-sm font-semibold text-on-surface-variant">
+                  Arrastrá una imagen
+                </p>
+                <p className="font-body text-xs text-on-surface-variant/60">
+                  o hacé click para elegir
+                </p>
+              </div>
+              <p className="font-body text-[10px] font-medium text-on-surface-variant/40">
+                JPG · PNG · WebP · GIF · 5MB
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <p className="font-body text-xs font-semibold text-destructive">{error}</p>
+      )}
     </div>
   )
 }
@@ -374,29 +542,16 @@ const PostForm = ({ mode, postId, initialData }: PostFormProps) => {
             </div>
 
             {/* Cover image */}
-            <div className="space-y-4 rounded-[1.5rem] bg-surface-container-lowest p-6 shadow-kinetic">
+            <div className="space-y-3 rounded-[1.5rem] bg-surface-container-lowest p-6 shadow-kinetic">
               <h3 className="flex items-center gap-2 font-body text-xs font-black uppercase tracking-widest text-on-surface-variant">
                 <ImageIcon className="h-3.5 w-3.5" />
                 Imagen de portada
               </h3>
-              <Input
-                type="url"
+              <CoverImageUpload
                 value={form.coverImage}
-                onChange={(e) => set('coverImage', e.target.value)}
-                placeholder="https://..."
+                onChange={(url) => set('coverImage', url)}
+                backendToken={session?.backendToken ?? ''}
               />
-              {form.coverImage && (
-                <div className="aspect-video overflow-hidden rounded-xl">
-                  <img
-                    src={form.coverImage}
-                    alt="Cover preview"
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      ;(e.target as HTMLImageElement).style.display = 'none'
-                    }}
-                  />
-                </div>
-              )}
             </div>
 
             {/* Tags */}
