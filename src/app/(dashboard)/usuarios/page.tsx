@@ -1,7 +1,7 @@
-import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation'
 
 const UsuariosPage = () => {
-  redirect('/usuarios/equipo');
+  redirect('/usuarios/equipo')
 }
 
-export default UsuariosPage;
+export default UsuariosPage

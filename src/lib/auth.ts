@@ -1,6 +1,6 @@
-import { NextAuthOptions } from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import api from './api';
+import { NextAuthOptions } from 'next-auth'
+import CredentialsProvider from 'next-auth/providers/credentials'
+import api from './api'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,16 +11,16 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) return null
 
         try {
           const { data } = await api.post('/auth/login', {
             email: credentials.email,
             password: credentials.password,
-          });
+          })
 
           // Solo ADMIN puede acceder al panel
-          if (data.user.role !== 'ADMIN') return null;
+          if (data.user.role !== 'ADMIN') return null
 
           return {
             id: data.user.id,
@@ -28,9 +28,9 @@ export const authOptions: NextAuthOptions = {
             email: data.user.email,
             role: data.user.role,
             backendToken: data.token,
-          };
+          }
         } catch {
-          return null;
+          return null
         }
       },
     }),
@@ -39,18 +39,18 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.userId = user.id;
-        token.role = (user as any).role;
-        token.backendToken = (user as any).backendToken;
+        token.userId = user.id
+        token.role = (user as any).role
+        token.backendToken = (user as any).backendToken
       }
-      return token;
+      return token
     },
 
     async session({ session, token }) {
-      session.user.id = token.userId;
-      session.user.role = token.role;
-      session.backendToken = token.backendToken;
-      return session;
+      session.user.id = token.userId
+      session.user.role = token.role
+      session.backendToken = token.backendToken
+      return session
     },
   },
 
@@ -61,4 +61,4 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
-};
+}
