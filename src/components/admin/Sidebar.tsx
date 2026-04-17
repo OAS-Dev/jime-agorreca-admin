@@ -12,6 +12,8 @@ import {
   FileText,
   PenLine,
   BookOpen,
+  PlaySquare,
+  UploadCloud,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -21,6 +23,8 @@ const blogItems = [
   { href: '/blog', label: 'Notas', icon: FileText },
   { href: '/blog/nuevo', label: 'Nueva nota', icon: PenLine },
 ]
+
+const videoItems = [{ href: '/videos', label: 'Videoteca', icon: PlaySquare }]
 
 const userItems = [
   { href: '/usuarios/equipo', label: 'Equipo', icon: ShieldCheck },
@@ -91,6 +95,22 @@ export const Sidebar = () => {
               label={label}
               icon={icon}
               active={href === '/blog' ? pathname === '/blog' : pathname.startsWith(href)}
+            />
+          ))}
+        </div>
+
+        {/* Sección Videos */}
+        <div className="pt-4">
+          <p className="px-4 pb-2 font-body text-[10px] font-black uppercase tracking-widest text-on-surface-variant/50">
+            Videos
+          </p>
+          {videoItems.map(({ href, label, icon }) => (
+            <NavItem
+              key={href}
+              href={href}
+              label={label}
+              icon={icon}
+              active={pathname.startsWith(href)}
             />
           ))}
         </div>
