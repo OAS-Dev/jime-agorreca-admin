@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useSession } from 'next-auth/react'
 import {
   PlaySquare,
@@ -17,7 +20,6 @@ import {
 import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -36,6 +38,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from '@/components/ui/form'
+import {
   Table,
   TableBody,
   TableCell,
@@ -48,6 +58,24 @@ import {
 
 type VideoStatus = 'PROCESSING' | 'READY' | 'ERROR'
 type VideoAccess = 'PUBLIC' | 'SUBSCRIBERS_ONLY'
+
+// ── Schemas ───────────────────────────────────────────────────────────────────
+
+const uploadSchema = z.object({
+  title: z.string().min(1, 'El título es requerido'),
+  description: z.string().optional(),
+  access: z.enum(['PUBLIC', 'SUBSCRIBERS_ONLY']).default('SUBSCRIBERS_ONLY'),
+})
+
+type UploadFormValues = z.infer<typeof uploadSchema>
+
+const editSchema = z.object({
+  title: z.string().min(1, 'El título es requerido'),
+  description: z.string().optional(),
+  access: z.enum(['PUBLIC', 'SUBSCRIBERS_ONLY']),
+})
+
+type EditFormValues = z.infer<typeof editSchema>
 
 interface Video {
   id: string
@@ -126,47 +154,42 @@ const UploadDialog = ({
   onUploaded: (video: Video) => void
   backendToken: string
 }) => {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [access, setAccess] = useState<VideoAccess>('SUBSCRIBERS_ONLY')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const reset = () => {
-    setTitle('')
-    setDescription('')
-    setAccess('SUBSCRIBERS_ONLY')
+  const form = useForm<UploadFormValues>({
+    resolver: zodResolver(uploadSchema),
+    defaultValues: { title: '', description: '', access: 'SUBSCRIBERS_ONLY' },
+  })
+
+  const handleClose = () => {
+    if (uploading) return
+    form.reset()
     setFile(null)
     setProgress(0)
     setError(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const handleClose = () => {
-    if (uploading) return
-    reset()
     onOpenChange(false)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!file || !title.trim()) return
+  const onSubmit = async (data: UploadFormValues) => {
+    if (!file) return
 
     setUploading(true)
     setError(null)
     setProgress(0)
 
     const formData = new FormData()
-    formData.append('title', title.trim())
-    if (description.trim()) formData.append('description', description.trim())
-    formData.append('access', access)
+    formData.append('title', data.title.trim())
+    if (data.description?.trim()) formData.append('description', data.description.trim())
+    formData.append('access', data.access)
     formData.append('file', file)
 
     try {
-      const { data } = await api.post<{ video: Video }>('/videos', formData, {
+      const { data: responseData } = await api.post<{ video: Video }>('/videos', formData, {
         headers: { Authorization: `Bearer ${backendToken}` },
         onUploadProgress: (evt) => {
           if (evt.total) setProgress(Math.round((evt.loaded * 100) / evt.total))
@@ -175,8 +198,10 @@ const UploadDialog = ({
         maxContentLength: Infinity,
         timeout: 0, // sin timeout para archivos grandes
       })
-      onUploaded(data.video)
-      reset()
+      onUploaded(responseData.video)
+      form.reset()
+      setFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       onOpenChange(false)
     } catch (err: unknown) {
       const msg =
@@ -198,110 +223,131 @@ const UploadDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5 px-8 pb-8 pt-2">
-          {/* File */}
-          <div className="space-y-2">
-            <Label>Archivo de video *</Label>
-            <div
-              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low p-8 transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <UploadCloud className="h-8 w-8 text-on-surface-variant/50" />
-              {file ? (
-                <p className="text-center font-body text-sm font-semibold text-on-surface">
-                  {file.name}
-                  <span className="ml-2 font-normal text-on-surface-variant">
-                    ({(file.size / 1024 / 1024).toFixed(1)} MB)
-                  </span>
-                </p>
-              ) : (
-                <p className="font-body text-sm font-medium text-on-surface-variant">
-                  Hacé click para seleccionar · MP4, MOV, WebM, MKV
-                </p>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo"
-              className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </div>
-
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="video-title">Título *</Label>
-            <Input
-              id="video-title"
-              placeholder="Ej: Estrategias de Meta Ads 2025"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={uploading}
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="video-desc">Descripción (opcional)</Label>
-            <Textarea
-              id="video-desc"
-              placeholder="Breve descripción del contenido..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={uploading}
-              rows={3}
-            />
-          </div>
-
-          {/* Access */}
-          <div className="space-y-2">
-            <Label>Acceso</Label>
-            <Select
-              value={access}
-              onValueChange={(v) => setAccess(v as VideoAccess)}
-              disabled={uploading}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
-                <SelectItem value="PUBLIC">Público</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Progress */}
-          {uploading && (
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-8 pb-8 pt-2">
+            {/* File */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between font-body text-xs font-semibold text-on-surface-variant">
-                <span className="flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Subiendo a Bunny.net...
-                </span>
-                <span>{progress}%</span>
+              <p className="text-sm font-medium leading-none">Archivo de video *</p>
+              <div
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low p-8 transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <UploadCloud className="h-8 w-8 text-on-surface-variant/50" />
+                {file ? (
+                  <p className="text-center font-body text-sm font-semibold text-on-surface">
+                    {file.name}
+                    <span className="ml-2 font-normal text-on-surface-variant">
+                      ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                    </span>
+                  </p>
+                ) : (
+                  <p className="font-body text-sm font-medium text-on-surface-variant">
+                    Hacé click para seleccionar · MP4, MOV, WebM, MKV
+                  </p>
+                )}
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-high">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo"
+                className="hidden"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
             </div>
-          )}
 
-          {error && <p className="font-body text-xs text-destructive">{error}</p>}
+            {/* Title */}
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Título *</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Ej: Estrategias de Meta Ads 2025"
+                      disabled={uploading}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={handleClose} disabled={uploading}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={uploading || !file || !title.trim()}>
-              {uploading ? 'Subiendo...' : 'Subir video'}
-            </Button>
-          </DialogFooter>
-        </form>
+            {/* Description */}
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descripción (opcional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Breve descripción del contenido..."
+                      disabled={uploading}
+                      rows={3}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Access */}
+            <FormField
+              control={form.control}
+              name="access"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Acceso</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={uploading}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
+                      <SelectItem value="PUBLIC">Público</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Progress */}
+            {uploading && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between font-body text-xs font-semibold text-on-surface-variant">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Subiendo a Bunny.net...
+                  </span>
+                  <span>{progress}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {error && <p className="font-body text-xs text-destructive">{error}</p>}
+
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={handleClose} disabled={uploading}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={uploading || !file}>
+                {uploading ? 'Subiendo...' : 'Subir video'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
@@ -320,33 +366,36 @@ const EditDialog = ({
   onSaved: (updated: Video) => void
   backendToken: string
 }) => {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [access, setAccess] = useState<VideoAccess>('SUBSCRIBERS_ONLY')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const form = useForm<EditFormValues>({
+    resolver: zodResolver(editSchema),
+    defaultValues: { title: '', description: '', access: 'SUBSCRIBERS_ONLY' },
+  })
+
   useEffect(() => {
     if (video) {
-      setTitle(video.title)
-      setDescription(video.description ?? '')
-      setAccess(video.access)
+      form.reset({
+        title: video.title,
+        description: video.description ?? '',
+        access: video.access,
+      })
       setError(null)
     }
-  }, [video])
+  }, [video, form])
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const onSubmit = async (data: EditFormValues) => {
     if (!video) return
     setSaving(true)
     setError(null)
     try {
-      const { data } = await api.patch<{ video: Video }>(
+      const { data: responseData } = await api.patch<{ video: Video }>(
         `/videos/${video.id}`,
-        { title: title.trim(), description: description.trim(), access },
+        { title: data.title.trim(), description: data.description?.trim(), access: data.access },
         { headers: { Authorization: `Bearer ${backendToken}` } },
       )
-      onSaved(data.video)
+      onSaved(responseData.video)
       onClose()
     } catch (err: unknown) {
       setError(
@@ -365,54 +414,70 @@ const EditDialog = ({
           <DialogTitle>Editar video</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSave} className="space-y-5 px-8 pb-8 pt-2">
-          <div className="space-y-2">
-            <Label htmlFor="edit-title">Título</Label>
-            <Input
-              id="edit-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={saving}
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-8 pb-8 pt-2">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Título</FormLabel>
+                  <FormControl>
+                    <Input disabled={saving} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-desc">Descripción</Label>
-            <Textarea
-              id="edit-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={saving}
-              rows={3}
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descripción</FormLabel>
+                  <FormControl>
+                    <Textarea disabled={saving} rows={3} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="space-y-2">
-            <Label>Acceso</Label>
-            <Select
-              value={access}
-              onValueChange={(v) => setAccess(v as VideoAccess)}
-              disabled={saving}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
-                <SelectItem value="PUBLIC">Público</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
 
-          {error && <p className="font-body text-xs text-destructive">{error}</p>}
+            <FormField
+              control={form.control}
+              name="access"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Acceso</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={saving}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
+                      <SelectItem value="PUBLIC">Público</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving || !title.trim()}>
-              {saving ? 'Guardando...' : 'Guardar cambios'}
-            </Button>
-          </DialogFooter>
-        </form>
+            {error && <p className="font-body text-xs text-destructive">{error}</p>}
+
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Guardando...' : 'Guardar cambios'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

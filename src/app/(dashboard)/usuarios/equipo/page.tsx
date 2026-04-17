@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useSession } from 'next-auth/react'
 import { ShieldCheck, UserPlus, SquarePen, Zap, Eye, EyeOff, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
@@ -19,8 +22,15 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -36,11 +46,15 @@ interface AdminUser {
   createdAt: string
 }
 
-interface CreateAdminForm {
-  name: string
-  email: string
-  password: string
-}
+// ── Schemas ───────────────────────────────────────────────────────────────────
+
+const createAdminSchema = z.object({
+  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  email: z.string().email('Email inválido'),
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+})
+
+type CreateAdminFormValues = z.infer<typeof createAdminSchema>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,32 +110,32 @@ interface CreateAdminDialogProps {
 }
 
 const CreateAdminDialog = ({ open, token, onOpenChange, onSuccess }: CreateAdminDialogProps) => {
-  const [form, setForm] = useState<CreateAdminForm>({ name: '', email: '', password: '' })
   const [showPassword, setShowPass] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const form = useForm<CreateAdminFormValues>({
+    resolver: zodResolver(createAdminSchema),
+    defaultValues: { name: '', email: '', password: '' },
+  })
 
   // Limpiar estado al cerrar
   useEffect(() => {
     if (!open) {
-      setForm({ name: '', email: '', password: '' })
+      form.reset()
       setShowPass(false)
       setError(null)
-      setSubmitting(false)
     }
-  }, [open])
+  }, [open, form])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const onSubmit = async (data: CreateAdminFormValues) => {
     setError(null)
-    setSubmitting(true)
 
     try {
       // 1. Registrar el usuario (endpoint público)
       const { data: registered } = await api.post<{ user: AdminUser }>('/auth/register', {
-        name: form.name.trim(),
-        email: form.email.trim().toLowerCase(),
-        password: form.password,
+        name: data.name.trim(),
+        email: data.email.trim().toLowerCase(),
+        password: data.password,
       })
 
       // 2. Promover a ADMIN con el token del admin logueado
@@ -137,8 +151,6 @@ const CreateAdminDialog = ({ open, token, onOpenChange, onSuccess }: CreateAdmin
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         'Ocurrió un error. Intentá de nuevo.'
       setError(msg)
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -150,88 +162,97 @@ const CreateAdminDialog = ({ open, token, onOpenChange, onSuccess }: CreateAdmin
           <DialogDescription>Creá la cuenta y asignale acceso al panel.</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5 px-8 pb-8">
-          {/* Nombre */}
-          <div className="space-y-2">
-            <Label htmlFor="admin-name">Nombre completo</Label>
-            <Input
-              id="admin-name"
-              type="text"
-              autoFocus
-              required
-              minLength={2}
-              placeholder="Ej: María García"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-          </div>
-
-          {/* Email */}
-          <div className="space-y-2">
-            <Label htmlFor="admin-email">Email</Label>
-            <Input
-              id="admin-email"
-              type="email"
-              required
-              placeholder="admin@ejemplo.com"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            />
-          </div>
-
-          {/* Contraseña */}
-          <div className="space-y-2">
-            <Label htmlFor="admin-password">Contraseña</Label>
-            <div className="relative">
-              <Input
-                id="admin-password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={8}
-                placeholder="Mínimo 8 caracteres"
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                className="pr-12"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass((s) => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-on-surface-variant transition-all hover:text-on-surface active:scale-90"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <p className="rounded-2xl bg-destructive/10 px-4 py-3 font-body text-sm font-semibold text-destructive">
-              {error}
-            </p>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-              className="flex-1 bg-surface-container-high text-on-surface hover:bg-surface-container-highest hover:text-on-surface"
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={submitting} className="flex-1">
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <ShieldCheck className="h-4 w-4" />
-                  Crear admin
-                </>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-8 pb-8">
+            {/* Nombre */}
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nombre completo</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ej: María García" autoFocus {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-            </Button>
-          </div>
-        </form>
+            />
+
+            {/* Email */}
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="admin@ejemplo.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Contraseña */}
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Contraseña</FormLabel>
+                  <div className="relative">
+                    <FormControl>
+                      <Input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Mínimo 8 caracteres"
+                        className="pr-12"
+                        {...field}
+                      />
+                    </FormControl>
+                    <button
+                      type="button"
+                      onClick={() => setShowPass((s) => !s)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-on-surface-variant transition-all hover:text-on-surface active:scale-90"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Error de API */}
+            {error && (
+              <p className="rounded-2xl bg-destructive/10 px-4 py-3 font-body text-sm font-semibold text-destructive">
+                {error}
+              </p>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={form.formState.isSubmitting}
+                className="flex-1 bg-surface-container-high text-on-surface hover:bg-surface-container-highest hover:text-on-surface"
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting} className="flex-1">
+                {form.formState.isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <ShieldCheck className="h-4 w-4" />
+                    Crear admin
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
