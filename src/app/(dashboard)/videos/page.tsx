@@ -64,7 +64,7 @@ type VideoAccess = 'PUBLIC' | 'SUBSCRIBERS_ONLY'
 const uploadSchema = z.object({
   title: z.string().min(1, 'El título es requerido'),
   description: z.string().optional(),
-  access: z.enum(['PUBLIC', 'SUBSCRIBERS_ONLY']).default('SUBSCRIBERS_ONLY'),
+  access: z.enum(['PUBLIC', 'SUBSCRIBERS_ONLY']),
 })
 
 type UploadFormValues = z.infer<typeof uploadSchema>
