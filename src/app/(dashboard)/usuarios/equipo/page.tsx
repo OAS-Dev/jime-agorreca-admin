@@ -293,7 +293,7 @@ const EquipoPage = () => {
   }
 
   return (
-    <div className="space-y-10 p-10 xl:p-12">
+    <div className="space-y-10 p-4 sm:p-6 lg:p-10 xl:p-12">
       {/* Dialog */}
       {session?.backendToken && (
         <CreateAdminDialog
@@ -348,6 +348,7 @@ const EquipoPage = () => {
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <section className="overflow-hidden rounded-[2rem] bg-surface-container-lowest shadow-kinetic">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="border-none bg-surface-container-low/50 hover:bg-surface-container-low/50">
@@ -423,6 +424,7 @@ const EquipoPage = () => {
             )}
           </TableBody>
         </Table>
+        </div>
 
         <div className="bg-surface-container-highest px-8 py-4">
           <p className="font-body text-sm font-semibold text-on-surface-variant">

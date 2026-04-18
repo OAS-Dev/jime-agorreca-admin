@@ -193,7 +193,7 @@ const DashboardPage = async () => {
     : { activity: [], metrics: defaultMetrics() }
 
   return (
-    <div className="p-10 xl:p-12">
+    <div className="p-4 sm:p-6 lg:p-10 xl:p-12">
       {/* ── Top header ─────────────────────────────────────────────────── */}
       <header className="mb-14 flex items-center justify-between">
         <div>
@@ -220,7 +220,7 @@ const DashboardPage = async () => {
       </header>
 
       {/* ── Bento grid ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-12 items-start gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-12 items-start gap-8">
         {/* ── Left / Center — 8 cols ──────────────────────────────────── */}
         <div className="col-span-12 space-y-8 xl:col-span-8">
           {/* Action cards */}
