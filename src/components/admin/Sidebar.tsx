@@ -12,9 +12,8 @@ import {
   LogOut,
   FileText,
   PenLine,
-  BookOpen,
   PlaySquare,
-  UploadCloud,
+  FolderOpen,
   Menu,
   X,
 } from 'lucide-react'
@@ -27,7 +26,10 @@ const blogItems = [
   { href: '/blog/nuevo', label: 'Nueva nota', icon: PenLine },
 ]
 
-const videoItems = [{ href: '/videos', label: 'Videoteca', icon: PlaySquare }]
+const videoItems = [
+  { href: '/videos', label: 'Videoteca', icon: PlaySquare },
+  { href: '/categorias', label: 'Categorías', icon: FolderOpen },
+]
 
 const userItems = [
   { href: '/usuarios/equipo', label: 'Equipo', icon: ShieldCheck },

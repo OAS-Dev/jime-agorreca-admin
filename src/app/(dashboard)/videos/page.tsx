@@ -16,6 +16,8 @@ import {
   Film,
   Globe,
   Lock,
+  ImageIcon,
+  RefreshCw,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -59,12 +61,19 @@ import {
 type VideoStatus = 'PROCESSING' | 'READY' | 'ERROR'
 type VideoAccess = 'PUBLIC' | 'SUBSCRIBERS_ONLY'
 
+interface Category {
+  id: string
+  name: string
+  order: number
+}
+
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 const uploadSchema = z.object({
   title: z.string().min(1, 'El título es requerido'),
   description: z.string().optional(),
   access: z.enum(['PUBLIC', 'SUBSCRIBERS_ONLY']),
+  categoryId: z.string().optional(),
 })
 
 type UploadFormValues = z.infer<typeof uploadSchema>
@@ -73,6 +82,7 @@ const editSchema = z.object({
   title: z.string().min(1, 'El título es requerido'),
   description: z.string().optional(),
   access: z.enum(['PUBLIC', 'SUBSCRIBERS_ONLY']),
+  categoryId: z.string().optional(),
 })
 
 type EditFormValues = z.infer<typeof editSchema>
@@ -86,6 +96,7 @@ interface Video {
   duration: number | null
   access: VideoAccess
   status: VideoStatus
+  categoryId: string | null
   embedUrl: string
   createdAt: string
 }
@@ -124,6 +135,9 @@ const SkeletonRow = () => (
       </div>
     </TableCell>
     <TableCell>
+      <div className="h-5 w-24 rounded-full bg-surface-container-high" />
+    </TableCell>
+    <TableCell>
       <div className="h-5 w-20 rounded-full bg-surface-container-high" />
     </TableCell>
     <TableCell>
@@ -148,30 +162,52 @@ const UploadDialog = ({
   onOpenChange,
   onUploaded,
   backendToken,
+  categories,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   onUploaded: (video: Video) => void
   backendToken: string
+  categories: Category[]
 }) => {
   const [file, setFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadStep, setUploadStep] = useState<'video' | 'thumbnail' | null>(null)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const thumbnailInputRef = useRef<HTMLInputElement>(null)
 
   const form = useForm<UploadFormValues>({
     resolver: zodResolver(uploadSchema),
-    defaultValues: { title: '', description: '', access: 'SUBSCRIBERS_ONLY' },
+    defaultValues: { title: '', description: '', access: 'SUBSCRIBERS_ONLY', categoryId: '__none__' },
   })
+
+  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null
+    setThumbnailFile(f)
+    if (f) {
+      const reader = new FileReader()
+      reader.onload = (ev) => setThumbnailPreview(ev.target?.result as string)
+      reader.readAsDataURL(f)
+    } else {
+      setThumbnailPreview(null)
+    }
+  }
 
   const handleClose = () => {
     if (uploading) return
     form.reset()
     setFile(null)
+    setThumbnailFile(null)
+    setThumbnailPreview(null)
     setProgress(0)
+    setUploadStep(null)
     setError(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (thumbnailInputRef.current) thumbnailInputRef.current.value = ''
     onOpenChange(false)
   }
 
@@ -181,11 +217,14 @@ const UploadDialog = ({
     setUploading(true)
     setError(null)
     setProgress(0)
+    setUploadStep('video')
 
     const formData = new FormData()
     formData.append('title', data.title.trim())
     if (data.description?.trim()) formData.append('description', data.description.trim())
     formData.append('access', data.access)
+    const catId = data.categoryId?.trim()
+    if (catId && catId !== '__none__') formData.append('categoryId', catId)
     formData.append('file', file)
 
     try {
@@ -196,12 +235,36 @@ const UploadDialog = ({
         },
         maxBodyLength: Infinity,
         maxContentLength: Infinity,
-        timeout: 0, // sin timeout para archivos grandes
+        timeout: 0,
       })
-      onUploaded(responseData.video)
+
+      let finalVideo = responseData.video
+
+      // If thumbnail was selected, upload it right after
+      if (thumbnailFile) {
+        setUploadStep('thumbnail')
+        setProgress(0)
+        const thumbForm = new FormData()
+        thumbForm.append('thumbnail', thumbnailFile)
+        try {
+          const { data: thumbData } = await api.patch<{ video: Video }>(
+            `/videos/${finalVideo.id}/thumbnail`,
+            thumbForm,
+            { headers: { Authorization: `Bearer ${backendToken}` } },
+          )
+          finalVideo = thumbData.video
+        } catch {
+          // Thumbnail upload failed but video was created — non-fatal
+        }
+      }
+
+      onUploaded(finalVideo)
       form.reset()
       setFile(null)
+      setThumbnailFile(null)
+      setThumbnailPreview(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
+      if (thumbnailInputRef.current) thumbnailInputRef.current.value = ''
       onOpenChange(false)
     } catch (err: unknown) {
       const msg =
@@ -210,13 +273,14 @@ const UploadDialog = ({
       setError(msg)
     } finally {
       setUploading(false)
+      setUploadStep(null)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader className="px-8 pt-8">
           <DialogTitle>Subir video</DialogTitle>
           <DialogDescription>
             El video se procesará en Bunny.net. El estado cambiará a "Listo" en unos minutos.
@@ -224,121 +288,209 @@ const UploadDialog = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-8 pb-8 pt-2">
-            {/* File */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium leading-none">Archivo de video *</p>
-              <div
-                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low p-8 transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <UploadCloud className="h-8 w-8 text-on-surface-variant/50" />
-                {file ? (
-                  <p className="text-center font-body text-sm font-semibold text-on-surface">
-                    {file.name}
-                    <span className="ml-2 font-normal text-on-surface-variant">
-                      ({(file.size / 1024 / 1024).toFixed(1)} MB)
-                    </span>
-                  </p>
-                ) : (
-                  <p className="font-body text-sm font-medium text-on-surface-variant">
-                    Hacé click para seleccionar · MP4, MOV, WebM, MKV
-                  </p>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="px-8 pb-8 pt-4">
+            {/* Two-column grid: files left, metadata right */}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
 
-            {/* Title */}
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Título *</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Ej: Estrategias de Meta Ads 2025"
-                      disabled={uploading}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Description */}
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Descripción (opcional)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Breve descripción del contenido..."
-                      disabled={uploading}
-                      rows={3}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Access */}
-            <FormField
-              control={form.control}
-              name="access"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Acceso</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange} disabled={uploading}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
-                      <SelectItem value="PUBLIC">Público</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Progress */}
-            {uploading && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between font-body text-xs font-semibold text-on-surface-variant">
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Subiendo a Bunny.net...
-                  </span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+              {/* ── Left col: file pickers ── */}
+              <div className="space-y-4">
+                {/* Video file */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium leading-none">Archivo de video *</p>
                   <div
-                    className="h-full rounded-full bg-primary transition-all duration-300"
-                    style={{ width: `${progress}%` }}
+                    className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low p-6 transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
+                    style={{ minHeight: '140px' }}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <UploadCloud className="h-8 w-8 text-on-surface-variant/50" />
+                    {file ? (
+                      <p className="text-center font-body text-sm font-semibold text-on-surface">
+                        {file.name}
+                        <span className="ml-1 font-normal text-on-surface-variant">
+                          ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-center font-body text-sm font-medium text-on-surface-variant">
+                        Hacé click para seleccionar
+                        <br />
+                        <span className="text-xs opacity-60">MP4, MOV, WebM, MKV</span>
+                      </p>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+
+                {/* Thumbnail */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium leading-none">
+                    Thumbnail{' '}
+                    <span className="font-normal text-on-surface-variant">(opcional)</span>
+                  </p>
+                  <div
+                    className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low transition-colors hover:border-primary/40 hover:bg-primary/[0.03] overflow-hidden"
+                    onClick={() => thumbnailInputRef.current?.click()}
+                  >
+                    {thumbnailPreview ? (
+                      <img
+                        src={thumbnailPreview}
+                        alt="preview"
+                        className="w-full aspect-video object-cover"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 p-6">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/[0.08]">
+                          <ImageIcon className="h-6 w-6 text-primary/40" />
+                        </div>
+                        <p className="text-center font-body text-sm font-medium text-on-surface-variant">
+                          Hacé click para seleccionar
+                          <br />
+                          <span className="text-xs opacity-60">JPG, PNG o WebP · máx. 5 MB</span>
+                        </p>
+                      </div>
+                    )}
+                    {thumbnailFile && (
+                      <p className="pb-2 font-body text-xs text-on-surface-variant">
+                        {thumbnailFile.name}
+                      </p>
+                    )}
+                  </div>
+                  <input
+                    ref={thumbnailInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleThumbnailChange}
                   />
                 </div>
               </div>
+
+              {/* ── Right col: metadata ── */}
+              <div className="space-y-4">
+                {/* Title */}
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Título *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Ej: Estrategias de Meta Ads 2025"
+                          disabled={uploading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Description */}
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Descripción (opcional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Breve descripción del contenido..."
+                          disabled={uploading}
+                          rows={3}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Category */}
+                {categories.length > 0 && (
+                  <FormField
+                    control={form.control}
+                    name="categoryId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Categoría{' '}
+                          <span className="font-normal text-on-surface-variant">(opcional)</span>
+                        </FormLabel>
+                        <Select value={field.value ?? '__none__'} onValueChange={field.onChange} disabled={uploading}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Sin categoría" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">Sin categoría</SelectItem>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Access */}
+                <FormField
+                  control={form.control}
+                  name="access"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Acceso</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange} disabled={uploading}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
+                          <SelectItem value="PUBLIC">Público</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Progress */}
+            {uploading && (
+              <div className="mt-6 space-y-2">
+                <div className="flex items-center justify-between font-body text-xs font-semibold text-on-surface-variant">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {uploadStep === 'thumbnail' ? 'Subiendo thumbnail...' : 'Subiendo video a Bunny.net...'}
+                  </span>
+                  {uploadStep === 'video' && <span>{progress}%</span>}
+                </div>
+                {uploadStep === 'video' && (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
             )}
 
-            {error && <p className="font-body text-xs text-destructive">{error}</p>}
+            {error && <p className="mt-4 font-body text-xs text-destructive">{error}</p>}
 
-            <DialogFooter>
+            <DialogFooter className="mt-6">
               <Button type="button" variant="ghost" onClick={handleClose} disabled={uploading}>
                 Cancelar
               </Button>
@@ -360,18 +512,20 @@ const EditDialog = ({
   onClose,
   onSaved,
   backendToken,
+  categories,
 }: {
   video: Video | null
   onClose: () => void
   onSaved: (updated: Video) => void
   backendToken: string
+  categories: Category[]
 }) => {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
-    defaultValues: { title: '', description: '', access: 'SUBSCRIBERS_ONLY' },
+    defaultValues: { title: '', description: '', access: 'SUBSCRIBERS_ONLY', categoryId: '__none__' },
   })
 
   useEffect(() => {
@@ -380,6 +534,7 @@ const EditDialog = ({
         title: video.title,
         description: video.description ?? '',
         access: video.access,
+        categoryId: video.categoryId ?? '__none__',
       })
       setError(null)
     }
@@ -392,7 +547,12 @@ const EditDialog = ({
     try {
       const { data: responseData } = await api.patch<{ video: Video }>(
         `/videos/${video.id}`,
-        { title: data.title.trim(), description: data.description?.trim(), access: data.access },
+        {
+          title: data.title.trim(),
+          description: data.description?.trim(),
+          access: data.access,
+          categoryId: data.categoryId && data.categoryId !== '__none__' ? data.categoryId : null,
+        },
         { headers: { Authorization: `Bearer ${backendToken}` } },
       )
       onSaved(responseData.video)
@@ -443,6 +603,33 @@ const EditDialog = ({
                 </FormItem>
               )}
             />
+
+            {/* Category */}
+            {categories.length > 0 && (
+              <FormField
+                control={form.control}
+                name="categoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoría</FormLabel>
+                    <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={saving}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sin categoría" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sin categoría</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -547,27 +734,178 @@ const DeleteDialog = ({
   )
 }
 
+// ── Thumbnail Dialog ──────────────────────────────────────────────────────────
+
+const ThumbnailDialog = ({
+  video,
+  onClose,
+  onSaved,
+  backendToken,
+}: {
+  video: Video | null
+  onClose: () => void
+  onSaved: (updated: Video) => void
+  backendToken: string
+}) => {
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!video) {
+      setThumbnailFile(null)
+      setThumbnailPreview(null)
+      setError(null)
+    }
+  }, [video])
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null
+    setThumbnailFile(f)
+    if (f) {
+      const reader = new FileReader()
+      reader.onload = (ev) => setThumbnailPreview(ev.target?.result as string)
+      reader.readAsDataURL(f)
+    } else {
+      setThumbnailPreview(null)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!video || !thumbnailFile) return
+    setUploading(true)
+    setError(null)
+    try {
+      const formData = new FormData()
+      formData.append('thumbnail', thumbnailFile)
+      const { data } = await api.patch<{ video: Video }>(
+        `/videos/${video.id}/thumbnail`,
+        formData,
+        { headers: { Authorization: `Bearer ${backendToken}` } },
+      )
+      onSaved(data.video)
+      onClose()
+    } catch (err: unknown) {
+      setError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'Error al actualizar el thumbnail',
+      )
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const currentThumb = thumbnailPreview ?? video?.thumbnailUrl ?? null
+
+  return (
+    <Dialog open={!!video} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Cambiar thumbnail</DialogTitle>
+          <DialogDescription>
+            Seleccioná una imagen para reemplazar el thumbnail actual de <strong>{video?.title}</strong>.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="px-8 pb-8 pt-2 space-y-5">
+          {/* Current / preview */}
+          <div
+            className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low p-4 transition-colors hover:border-primary/40"
+            onClick={() => inputRef.current?.click()}
+          >
+            {currentThumb ? (
+              <img
+                src={currentThumb}
+                alt="thumbnail"
+                className="w-full aspect-video rounded-xl object-cover"
+              />
+            ) : (
+              <div className="flex w-full aspect-video items-center justify-center rounded-xl bg-primary/[0.08]">
+                <ImageIcon className="h-10 w-10 text-primary/30" />
+              </div>
+            )}
+            <p className="font-body text-xs text-on-surface-variant">
+              {thumbnailFile ? thumbnailFile.name : 'Hacé click para seleccionar imagen'}
+            </p>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          {error && <p className="font-body text-xs text-destructive">{error}</p>}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={onClose} disabled={uploading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={uploading || !thumbnailFile}>
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Subiendo...
+                </>
+              ) : (
+                'Guardar thumbnail'
+              )}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const VideosPage = () => {
   const { data: session } = useSession()
   const [videos, setVideos] = useState<Video[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showUpload, setShowUpload] = useState(false)
   const [toEdit, setToEdit] = useState<Video | null>(null)
   const [toDelete, setToDelete] = useState<Video | null>(null)
+  const [toSetThumbnail, setToSetThumbnail] = useState<Video | null>(null)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
+
+  const handleSync = async (video: Video) => {
+    if (!session?.backendToken || syncingId) return
+    setSyncingId(video.id)
+    try {
+      const { data } = await api.post<{ video: Video }>(
+        `/videos/${video.id}/sync`,
+        {},
+        { headers: { Authorization: `Bearer ${session.backendToken}` } },
+      )
+      setVideos((prev) => prev.map((v) => (v.id === data.video.id ? data.video : v)))
+    } catch {
+      // ignore — UI doesn't need to show an error for sync
+    } finally {
+      setSyncingId(null)
+    }
+  }
 
   useEffect(() => {
     if (!session?.backendToken) return
+    const headers = { Authorization: `Bearer ${session.backendToken}` }
     setLoading(true)
-    api
-      .get<{ videos: Video[] }>('/videos', {
-        headers: { Authorization: `Bearer ${session.backendToken}` },
+    Promise.all([
+      api.get<{ videos: Video[] }>('/videos', { headers }),
+      api.get<{ categories: Category[] }>('/categories', { headers }),
+    ])
+      .then(([videosRes, catsRes]) => {
+        setVideos(videosRes.data.videos)
+        setCategories(catsRes.data.categories)
       })
-      .then(({ data }) => setVideos(data.videos))
       .catch((err) =>
-        setError(err?.response?.data?.message ?? err?.message ?? 'Error al cargar videos'),
+        setError(err?.response?.data?.message ?? err?.message ?? 'Error al cargar datos'),
       )
       .finally(() => setLoading(false))
   }, [session?.backendToken])
@@ -581,6 +919,7 @@ const VideosPage = () => {
         open={showUpload}
         onOpenChange={setShowUpload}
         backendToken={session?.backendToken ?? ''}
+        categories={categories}
         onUploaded={(video) => setVideos((prev) => [video, ...prev])}
       />
       <EditDialog
@@ -590,11 +929,20 @@ const VideosPage = () => {
           setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)))
         }
         backendToken={session?.backendToken ?? ''}
+        categories={categories}
       />
       <DeleteDialog
         video={toDelete}
         onClose={() => setToDelete(null)}
         onDeleted={(id) => setVideos((prev) => prev.filter((v) => v.id !== id))}
+        backendToken={session?.backendToken ?? ''}
+      />
+      <ThumbnailDialog
+        video={toSetThumbnail}
+        onClose={() => setToSetThumbnail(null)}
+        onSaved={(updated) =>
+          setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)))
+        }
         backendToken={session?.backendToken ?? ''}
       />
 
@@ -652,6 +1000,7 @@ const VideosPage = () => {
             <TableRow className="border-none bg-surface-container-low/50 hover:bg-surface-container-low/50">
               <TableHead>Miniatura</TableHead>
               <TableHead>Video</TableHead>
+              <TableHead>Categoría</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Acceso</TableHead>
               <TableHead>Subido</TableHead>
@@ -664,13 +1013,13 @@ const VideosPage = () => {
               Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
             ) : error ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="py-16 text-center">
+                <TableCell colSpan={7} className="py-16 text-center">
                   <p className="font-body text-sm font-semibold text-destructive">{error}</p>
                 </TableCell>
               </TableRow>
             ) : videos.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="py-20 text-center">
+                <TableCell colSpan={7} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-3 text-on-surface-variant">
                     <PlaySquare className="h-10 w-10 opacity-30" />
                     <p className="font-body text-sm font-semibold">No hay videos aún</p>
@@ -715,6 +1064,17 @@ const VideosPage = () => {
                       )}
                     </TableCell>
 
+                    {/* Category */}
+                    <TableCell>
+                      {video.categoryId ? (
+                        <Badge variant="warning">
+                          {categories.find((c) => c.id === video.categoryId)?.name ?? '—'}
+                        </Badge>
+                      ) : (
+                        <span className="font-body text-xs text-on-surface-variant/50">—</span>
+                      )}
+                    </TableCell>
+
                     {/* Status */}
                     <TableCell>
                       <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
@@ -747,11 +1107,36 @@ const VideosPage = () => {
                     {/* Actions */}
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        {/* Sync from Bunny — only for non-READY videos */}
+                        {video.status !== 'READY' && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-lg hover:bg-primary/[0.08] hover:text-primary"
+                            onClick={() => handleSync(video)}
+                            disabled={syncingId === video.id}
+                            title="Sincronizar estado con Bunny.net"
+                          >
+                            <RefreshCw
+                              className={`h-4 w-4 ${syncingId === video.id ? 'animate-spin' : ''}`}
+                            />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg hover:bg-primary/[0.08] hover:text-primary"
+                          onClick={() => setToSetThumbnail(video)}
+                          title="Cambiar thumbnail"
+                        >
+                          <ImageIcon className="h-4 w-4" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
                           className="h-8 w-8 rounded-lg hover:bg-primary/[0.08] hover:text-primary"
                           onClick={() => setToEdit(video)}
+                          title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -760,6 +1145,7 @@ const VideosPage = () => {
                           variant="ghost"
                           className="h-8 w-8 rounded-lg hover:bg-destructive/[0.08] hover:text-destructive"
                           onClick={() => setToDelete(video)}
+                          title="Eliminar"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
