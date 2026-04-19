@@ -277,7 +277,7 @@ const SuscriptoresPage = () => {
   const expiredCount = subs.filter((s) => s.status === 'EXPIRED' || s.status === 'CANCELLED').length
 
   return (
-    <div className="space-y-10 p-10 xl:p-12">
+    <div className="space-y-10 p-4 sm:p-6 lg:p-10 xl:p-12">
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="space-y-1">
         <h2 className="font-headline text-4xl font-extrabold tracking-tight text-on-surface">
@@ -289,7 +289,7 @@ const SuscriptoresPage = () => {
       </div>
 
       {/* ── Metrics ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Total" value={subs.length} icon={Users} loading={loading} />
         <MetricCard
           label="Activas"
@@ -348,6 +348,7 @@ const SuscriptoresPage = () => {
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <section className="overflow-hidden rounded-[2rem] bg-surface-container-lowest shadow-kinetic">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="border-none bg-surface-container-low/50 hover:bg-surface-container-low/50">
@@ -514,6 +515,7 @@ const SuscriptoresPage = () => {
             )}
           </TableBody>
         </Table>
+        </div>
 
         {/* Table footer */}
         <div className="flex items-center justify-between bg-surface-container-highest px-8 py-4">
