@@ -18,7 +18,26 @@ import {
   Lock,
   ImageIcon,
   RefreshCw,
+  GripVertical,
+  ArrowUpDown,
 } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -861,6 +880,211 @@ const ThumbnailDialog = ({
   )
 }
 
+// ── Reorder Dialog ────────────────────────────────────────────────────────────
+
+const SortableVideoRow = ({ video }: { video: Video }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: video.id,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        zIndex: isDragging ? 10 : undefined,
+      }}
+      className="flex items-center gap-3 rounded-xl bg-surface-container-lowest px-3 py-2.5 shadow-sm"
+    >
+      {/* Drag handle */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab touch-none text-on-surface-variant/40 hover:text-on-surface-variant active:cursor-grabbing"
+        tabIndex={-1}
+      >
+        <GripVertical className="h-5 w-5" />
+      </button>
+
+      {/* Thumbnail */}
+      {video.thumbnailUrl && video.status === 'READY' ? (
+        <img
+          src={video.thumbnailUrl}
+          alt={video.title}
+          className="h-10 w-16 shrink-0 rounded-lg object-cover"
+        />
+      ) : (
+        <div className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-primary/[0.08]">
+          <Film className="h-4 w-4 text-primary/40" />
+        </div>
+      )}
+
+      {/* Info */}
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-body text-sm font-semibold text-on-surface">{video.title}</p>
+        {video.duration && (
+          <p className="font-body text-[11px] text-on-surface-variant">{formatDuration(video.duration)}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const ReorderDialog = ({
+  open,
+  onOpenChange,
+  videos,
+  categories,
+  backendToken,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  videos: Video[]
+  categories: Category[]
+  backendToken: string
+  onSaved: (items: { id: string; order: number }[]) => void
+}) => {
+  // Local state: map of categoryId (or '__none__') → ordered video list
+  const [groups, setGroups] = useState<Map<string, Video[]>>(new Map())
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  // Build groups when dialog opens
+  useEffect(() => {
+    if (!open) return
+    const map = new Map<string, Video[]>()
+    // Add a group per category (in category order)
+    categories.forEach((cat) => {
+      map.set(
+        cat.id,
+        videos
+          .filter((v) => v.categoryId === cat.id)
+          .sort((a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+      )
+    })
+    // Sin categoría
+    const uncategorized = videos
+      .filter((v) => !v.categoryId)
+      .sort((a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    if (uncategorized.length > 0) map.set('__none__', uncategorized)
+    setGroups(map)
+    setError(null)
+  }, [open, videos, categories])
+
+  const handleDragEnd = (groupKey: string, event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setGroups((prev) => {
+      const group = prev.get(groupKey) ?? []
+      const oldIndex = group.findIndex((v) => v.id === active.id)
+      const newIndex = group.findIndex((v) => v.id === over.id)
+      const next = new Map(prev)
+      next.set(groupKey, arrayMove(group, oldIndex, newIndex))
+      return next
+    })
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    const items: { id: string; order: number }[] = []
+    groups.forEach((groupVideos) => {
+      groupVideos.forEach((v, i) => items.push({ id: v.id, order: i }))
+    })
+    try {
+      await api.patch('/videos/reorder', { items }, {
+        headers: { Authorization: `Bearer ${backendToken}` },
+      })
+      onSaved(items)
+      onOpenChange(false)
+    } catch (err: unknown) {
+      setError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'Error al guardar el orden',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Build ordered section list: categories in order, then __none__
+  const sections: { key: string; label: string }[] = [
+    ...categories
+      .filter((cat) => (groups.get(cat.id)?.length ?? 0) > 0)
+      .map((cat) => ({ key: cat.id, label: cat.name })),
+    ...(groups.get('__none__')?.length ? [{ key: '__none__', label: 'Sin categoría' }] : []),
+  ]
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!saving) onOpenChange(v) }}>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>Reordenar videos</DialogTitle>
+          <DialogDescription>
+            Arrastrá los videos para definir el orden en que aparecen en cada categoría.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Scrollable body */}
+        <div className="flex-1 space-y-6 overflow-y-auto px-1 py-2">
+          {sections.length === 0 ? (
+            <p className="py-8 text-center font-body text-sm text-on-surface-variant">
+              No hay videos para reordenar.
+            </p>
+          ) : (
+            sections.map(({ key, label }) => {
+              const group = groups.get(key) ?? []
+              return (
+                <div key={key}>
+                  <p className="mb-2 px-1 font-body text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">
+                    {label} · {group.length} {group.length === 1 ? 'video' : 'videos'}
+                  </p>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(e) => handleDragEnd(key, e)}
+                  >
+                    <SortableContext items={group.map((v) => v.id)} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-2">
+                        {group.map((video) => (
+                          <SortableVideoRow key={video.id} video={video} />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {error && <p className="shrink-0 px-1 font-body text-xs text-destructive">{error}</p>}
+
+        <DialogFooter className="shrink-0 pt-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSave} disabled={saving || sections.length === 0}>
+            {saving ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Guardando...</>
+            ) : (
+              'Guardar orden'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const VideosPage = () => {
@@ -870,6 +1094,7 @@ const VideosPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+  const [showReorder, setShowReorder] = useState(false)
   const [toEdit, setToEdit] = useState<Video | null>(null)
   const [toDelete, setToDelete] = useState<Video | null>(null)
   const [toSetThumbnail, setToSetThumbnail] = useState<Video | null>(null)
@@ -945,6 +1170,22 @@ const VideosPage = () => {
         }
         backendToken={session?.backendToken ?? ''}
       />
+      <ReorderDialog
+        open={showReorder}
+        onOpenChange={setShowReorder}
+        videos={videos}
+        categories={categories}
+        backendToken={session?.backendToken ?? ''}
+        onSaved={(items) => {
+          // Actualiza el campo order en el estado local para que la tabla refleje el nuevo orden
+          const orderMap = new Map(items.map(({ id, order }) => [id, order]))
+          setVideos((prev) =>
+            [...prev]
+              .map((v) => ({ ...v, order: orderMap.get(v.id) ?? v.order }))
+              .sort((a, b) => a.order - b.order),
+          )
+        }}
+      />
 
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -956,10 +1197,21 @@ const VideosPage = () => {
             Gestioná los videos del dashboard de suscriptores.
           </p>
         </div>
-        <Button onClick={() => setShowUpload(true)} className="gap-2">
-          <UploadCloud className="h-4 w-4" />
-          Subir video
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowReorder(true)}
+            disabled={videos.length === 0}
+            className="gap-2"
+          >
+            <ArrowUpDown className="h-4 w-4" />
+            Reordenar
+          </Button>
+          <Button onClick={() => setShowUpload(true)} className="gap-2">
+            <UploadCloud className="h-4 w-4" />
+            Subir video
+          </Button>
+        </div>
       </div>
 
       {/* Metrics */}

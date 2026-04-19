@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useSession } from 'next-auth/react'
-import { FolderOpen, Plus, Pencil, Trash2, Film, Loader2, GripVertical } from 'lucide-react'
+import { FolderOpen, Plus, Pencil, Trash2, Film, Loader2, GripVertical, ImagePlus, X } from 'lucide-react'
 import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,7 +52,7 @@ interface Category {
 const categorySchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
   description: z.string().optional(),
-  coverImage: z.string().url('URL inválida').optional().or(z.literal('')),
+  coverImage: z.string().optional(),
   order: z.number().int().min(0),
 })
 
@@ -86,7 +86,10 @@ const CategoryFormDialog = ({
   backendToken: string
 }) => {
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const isEdit = !!initial
 
   const form = useForm<CategoryFormValues>({
@@ -107,8 +110,41 @@ const CategoryFormDialog = ({
           : { name: '', description: '', coverImage: '', order: 0 },
       )
       setError(null)
+      setUploadError(null)
     }
   }, [open, initial, form])
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setUploadError(null)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const { data } = await api.post<{ url: string }>(
+        '/upload/image?folder=categories',
+        formData,
+        {
+          // NO pongas Content-Type acá — axios lo setea solo con el boundary correcto
+          headers: { Authorization: `Bearer ${backendToken}` },
+        },
+      )
+      form.setValue('coverImage', data.url, { shouldDirty: true })
+    } catch (err: unknown) {
+      setUploadError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'Error al subir la imagen',
+      )
+    } finally {
+      setUploading(false)
+      // Reset input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const onSubmit = async (data: CategoryFormValues) => {
     setSaving(true)
@@ -146,9 +182,11 @@ const CategoryFormDialog = ({
     }
   }
 
+  const isBusy = saving || uploading
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!saving) onOpenChange(v) }}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={(v) => { if (!isBusy) onOpenChange(v) }}>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar categoría' : 'Nueva categoría'}</DialogTitle>
           {!isEdit && (
@@ -159,56 +197,122 @@ const CategoryFormDialog = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 px-8 pb-8 pt-2">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nombre *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ej: Administrador de Meta" disabled={saving} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-8 pb-8 pt-2">
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Descripción <span className="font-normal text-on-surface-variant">(opcional)</span></FormLabel>
-                  <FormControl>
-                    <Input placeholder="Breve descripción..." disabled={saving} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+            {/* ── Imagen — full width, aspect 16/6 ─────────────────────── */}
             <FormField
               control={form.control}
               name="coverImage"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>URL de imagen de portada <span className="font-normal text-on-surface-variant">(opcional)</span></FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://..." disabled={saving} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                  {field.value && (
-                    <img
-                      src={field.value}
-                      alt="preview"
-                      className="mt-2 h-20 w-full rounded-xl object-cover"
-                      onError={(e) => (e.currentTarget.style.display = 'none')}
-                    />
+                  <FormLabel>
+                    Imagen de portada{' '}
+                    <span className="font-normal text-on-surface-variant">(opcional)</span>
+                  </FormLabel>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleFileChange}
+                    disabled={isBusy}
+                  />
+
+                  {field.value ? (
+                    <div className="group relative w-full overflow-hidden rounded-xl" style={{ aspectRatio: '16/7' }}>
+                      <img
+                        src={field.value}
+                        alt="portada"
+                        className="absolute inset-0 h-full w-full object-cover"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="gap-1.5 text-xs"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isBusy}
+                        >
+                          {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImagePlus className="h-3 w-3" />}
+                          Cambiar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="gap-1.5 text-xs"
+                          onClick={() => form.setValue('coverImage', '', { shouldDirty: true })}
+                          disabled={isBusy}
+                        >
+                          <X className="h-3 w-3" />
+                          Quitar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isBusy}
+                      className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline-variant text-center transition-colors hover:border-primary/50 hover:bg-primary/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ aspectRatio: '16/7' }}
+                    >
+                      {uploading ? (
+                        <>
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          <p className="font-body text-xs text-on-surface-variant">Subiendo...</p>
+                        </>
+                      ) : (
+                        <>
+                          <ImagePlus className="h-6 w-6 text-on-surface-variant/50" />
+                          <p className="font-body text-xs text-on-surface-variant">Hacé clic para subir una imagen</p>
+                          <p className="font-body text-[10px] text-on-surface-variant/60">
+                            1280 × 560 px · JPG, PNG o WebP · máx. 5MB
+                          </p>
+                        </>
+                      )}
+                    </button>
                   )}
+
+                  {uploadError && <p className="font-body text-xs text-destructive">{uploadError}</p>}
+                  <FormMessage />
                 </FormItem>
               )}
             />
+
+            {/* ── Campos: nombre + descripción en fila, orden aparte ───── */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej: Administrador de Meta" disabled={isBusy} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descripción <span className="font-normal text-on-surface-variant">(opcional)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="Breve descripción..." disabled={isBusy} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
@@ -220,7 +324,7 @@ const CategoryFormDialog = ({
                     <Input
                       type="number"
                       min={0}
-                      disabled={saving}
+                      disabled={isBusy}
                       className="w-28"
                       value={field.value}
                       onChange={(e) => field.onChange(e.target.valueAsNumber)}
@@ -237,10 +341,10 @@ const CategoryFormDialog = ({
             {error && <p className="font-body text-xs text-destructive">{error}</p>}
 
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isBusy}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" disabled={isBusy}>
                 {saving ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{isEdit ? 'Guardando...' : 'Creando...'}</>
                 ) : (
@@ -248,6 +352,7 @@ const CategoryFormDialog = ({
                 )}
               </Button>
             </DialogFooter>
+
           </form>
         </Form>
       </DialogContent>
