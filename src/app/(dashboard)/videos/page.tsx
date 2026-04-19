@@ -116,6 +116,7 @@ interface Video {
   access: VideoAccess
   status: VideoStatus
   categoryId: string | null
+  order: number
   embedUrl: string
   createdAt: string
 }
