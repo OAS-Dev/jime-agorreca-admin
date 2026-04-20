@@ -2,32 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Claude Design — tokens (mirrors frontend) ── */
+:root {
+  --magenta: #D81B73;
+  --magenta-deep: #A10E54;
+  --magenta-soft: #FFE3EF;
+  --yellow: #FFD84D;
+  --yellow-soft: #FFF4C8;
+  --ink: #1A1014;
+  --ink-soft: #4A3A42;
+  --ink-muted: #7A6B73;
+  --cream: #FBF7F2;
+  --paper: #FFFFFF;
+  --line: #EADFD5;
+}
+
 @layer base {
   :root {
-    /* Brand — Kinetic Editorial */
-    --primary: 332 100% 35%;
-    --primary-foreground: 352 100% 97%;
+    /* Brand */
+    --primary: 332 78% 48%;        /* #D81B73 — alineado con --magenta */
+    --primary-foreground: 0 0% 100%;
     --secondary: 53 100% 20%;
     --secondary-foreground: 53 100% 18%;
 
-    /* Surface */
-    --background: 210 5% 96%;
-    --foreground: 195 4% 18%;
+    /* Surface — tonos cálidos (crema) */
+    --background: 35 33% 97%;      /* #FBF7F2 — --cream */
+    --foreground: 330 24% 8%;      /* #1A1014 — --ink */
 
     /* Shadcn system tokens */
     --card: 0 0% 100%;
-    --card-foreground: 195 4% 18%;
+    --card-foreground: 330 24% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 195 4% 18%;
-    --muted: 210 5% 92%;
-    --muted-foreground: 195 4% 45%;
-    --accent: 210 5% 92%;
-    --accent-foreground: 195 4% 18%;
+    --popover-foreground: 330 24% 8%;
+    --muted: 28 20% 93%;
+    --muted-foreground: 330 9% 45%;
+    --accent: 28 20% 93%;
+    --accent-foreground: 330 24% 8%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 210 5% 88%;
-    --input: 210 5% 88%;
-    --ring: 332 100% 35%;
+    --border: 28 28% 88%;          /* #EADFD5 — --line */
+    --input: 28 28% 88%;
+    --ring: 332 78% 48%;
     --radius: 0.5rem;
   }
 }
@@ -37,7 +52,8 @@
     @apply border-border;
   }
   body {
-    @apply bg-surface-bright text-on-surface;
+    background: var(--cream);
+    color: var(--ink);
     font-family: var(--font-body), 'Manrope', sans-serif;
   }
   h1,

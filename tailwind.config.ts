@@ -17,6 +17,8 @@ const config: Config = {
       fontFamily: {
         headline: ['var(--font-headline)', 'sans-serif'],
         body: ['var(--font-body)', 'sans-serif'],
+        fraunces: ['var(--font-fraunces)', 'serif'],
+        mono: ['var(--font-mono)', 'monospace'],
       },
       colors: {
         // shadcn CSS variable system
@@ -70,6 +72,18 @@ const config: Config = {
         'on-surface-variant': '#595c5d',
         'outline-variant': '#abadae',
         'outline': '#757778',
+        // Claude Design tokens (mirrors frontend — usar con var() o clase directa)
+        'magenta': 'var(--magenta)',
+        'magenta-deep': 'var(--magenta-deep)',
+        'magenta-soft': 'var(--magenta-soft)',
+        'yellow': 'var(--yellow)',
+        'yellow-soft': 'var(--yellow-soft)',
+        'ink': 'var(--ink)',
+        'ink-soft': 'var(--ink-soft)',
+        'ink-muted': 'var(--ink-muted)',
+        'cream': 'var(--cream)',
+        'paper': 'var(--paper)',
+        'line': 'var(--line)',
       },
       keyframes: {
         'accordion-down': {
