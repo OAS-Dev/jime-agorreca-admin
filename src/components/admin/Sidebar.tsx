@@ -14,6 +14,7 @@ import {
   PenLine,
   PlaySquare,
   FolderOpen,
+  FileDown,
   Menu,
   X,
 } from 'lucide-react'
@@ -30,6 +31,8 @@ const videoItems = [
   { href: '/videos', label: 'Videoteca', icon: PlaySquare },
   { href: '/categorias', label: 'Categorías', icon: FolderOpen },
 ]
+
+const resourceItems = [{ href: '/recursos', label: 'Recursos', icon: FileDown }]
 
 const userItems = [
   { href: '/usuarios/equipo', label: 'Equipo', icon: ShieldCheck },
@@ -157,6 +160,23 @@ export const Sidebar = () => {
               Videos
             </p>
             {videoItems.map(({ href, label, icon }) => (
+              <NavItem
+                key={href}
+                href={href}
+                label={label}
+                icon={icon}
+                active={pathname.startsWith(href)}
+                onClose={() => setIsOpen(false)}
+              />
+            ))}
+          </div>
+
+          {/* Sección Recursos */}
+          <div className="pt-4">
+            <p className="px-4 pb-2 font-mono text-[10px] font-black uppercase tracking-widest text-ink-muted/60">
+              Recursos
+            </p>
+            {resourceItems.map(({ href, label, icon }) => (
               <NavItem
                 key={href}
                 href={href}
