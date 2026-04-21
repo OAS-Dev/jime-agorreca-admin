@@ -192,7 +192,18 @@ const UploadModal = ({ open, onClose, onSuccess, token }: UploadFormProps) => {
                 accept=".pdf,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.zip,.csv,.jpg,.jpeg,.png,.webp"
                 onChange={(e) => {
                   const f = e.target.files?.[0]
-                  if (f) { setFile(f); if (!title) setTitle(f.name.replace(/\.[^.]+$/, '')) }
+                  if (f) {
+                    setFile(f)
+                    if (!title) {
+                      const suggested = f.name
+                        .replace(/\.[^.]+$/, '')        // quitar extensión
+                        .replace(/[-_]+/g, ' ')         // guiones/underscores → espacios
+                        .replace(/\s+/g, ' ')           // espacios múltiples → uno
+                        .trim()
+                        .replace(/\b\w/g, c => c.toUpperCase()) // Title Case
+                      setTitle(suggested)
+                    }
+                  }
                 }}
               />
             </div>
@@ -200,7 +211,10 @@ const UploadModal = ({ open, onClose, onSuccess, token }: UploadFormProps) => {
 
           {/* Title */}
           <div className="space-y-1.5">
-            <p className="text-sm font-medium leading-none">Título *</p>
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-sm font-medium leading-none">Nombre visible *</p>
+              <span className="text-xs text-on-surface-variant">— lo que verán las usuarias</span>
+            </div>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
