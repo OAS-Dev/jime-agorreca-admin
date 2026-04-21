@@ -15,6 +15,7 @@ import {
   PlaySquare,
   FolderOpen,
   FileDown,
+  Video,
   Menu,
   X,
 } from 'lucide-react'
@@ -31,6 +32,8 @@ const videoItems = [
   { href: '/videos', label: 'Videoteca', icon: PlaySquare },
   { href: '/categorias', label: 'Categorías', icon: FolderOpen },
 ]
+
+const sessionItems = [{ href: '/sesiones', label: 'Sesiones en vivo', icon: Video }]
 
 const resourceItems = [{ href: '/recursos', label: 'Recursos', icon: FileDown }]
 
@@ -160,6 +163,23 @@ export const Sidebar = () => {
               Videos
             </p>
             {videoItems.map(({ href, label, icon }) => (
+              <NavItem
+                key={href}
+                href={href}
+                label={label}
+                icon={icon}
+                active={pathname.startsWith(href)}
+                onClose={() => setIsOpen(false)}
+              />
+            ))}
+          </div>
+
+          {/* Sección Sesiones */}
+          <div className="pt-4">
+            <p className="px-4 pb-2 font-mono text-[10px] font-black uppercase tracking-widest text-ink-muted/60">
+              Sesiones
+            </p>
+            {sessionItems.map(({ href, label, icon }) => (
               <NavItem
                 key={href}
                 href={href}
