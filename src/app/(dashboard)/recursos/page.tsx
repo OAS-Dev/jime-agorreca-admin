@@ -153,70 +153,83 @@ const UploadModal = ({ open, onClose, onSuccess, token }: UploadFormProps) => {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+        <form onSubmit={handleSubmit} className="space-y-4 px-8 pt-2">
           {/* File picker */}
-          <div
-            className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors hover:border-primary/50"
-            style={{ borderColor: 'var(--line)' }}
-            onClick={() => fileRef.current?.click()}
-          >
-            <UploadCloud className="h-8 w-8 text-muted-foreground" />
-            {file ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setFile(null); if (fileRef.current) fileRef.current.value = '' }}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Hacé click para seleccionar un archivo<br/>
-                <span className="text-xs opacity-60">PDF, XLSX, DOCX, ZIP, CSV, imágenes — máx. 100 MB</span>
-              </p>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.zip,.csv,.jpg,.jpeg,.png,.webp"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) { setFile(f); if (!title) setTitle(f.name.replace(/\.[^.]+$/, '')) }
-              }}
-            />
+          <div className="space-y-2">
+            <p className="text-sm font-medium leading-none">Archivo *</p>
+            <div
+              className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low p-8 text-center transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
+              onClick={() => fileRef.current?.click()}
+            >
+              <UploadCloud className="h-8 w-8 text-on-surface-variant/50" />
+              {file ? (
+                <div className="flex items-center gap-2">
+                  <span className="font-body text-sm font-semibold text-on-surface">
+                    {file.name}
+                    <span className="ml-1 font-normal text-on-surface-variant">
+                      ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setFile(null); if (fileRef.current) fileRef.current.value = '' }}
+                    className="text-on-surface-variant hover:text-on-surface"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <p className="font-body text-sm font-medium text-on-surface-variant">
+                  Hacé click para seleccionar un archivo
+                  <br />
+                  <span className="text-xs opacity-60">PDF, XLSX, DOCX, ZIP, CSV, imágenes — máx. 100 MB</span>
+                </p>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.zip,.csv,.jpg,.jpeg,.png,.webp"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) { setFile(f); if (!title) setTitle(f.name.replace(/\.[^.]+$/, '')) }
+                }}
+              />
+            </div>
           </div>
 
           {/* Title */}
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold">Título</label>
+            <p className="text-sm font-medium leading-none">Título *</p>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ej: Guía de Estructura de Campaña"
+              className="border border-outline-variant"
             />
           </div>
 
           {/* Description */}
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold">Descripción <span className="font-normal text-muted-foreground">(opcional)</span></label>
+            <p className="text-sm font-medium leading-none">
+              Descripción{' '}
+              <span className="font-normal text-on-surface-variant">(opcional)</span>
+            </p>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Breve descripción del contenido..."
               rows={2}
+              className="border border-outline-variant"
             />
           </div>
 
           {/* Category + Access */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold">Categoría</label>
+              <p className="text-sm font-medium leading-none">Categoría</p>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="border border-outline-variant"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
@@ -225,9 +238,9 @@ const UploadModal = ({ open, onClose, onSuccess, token }: UploadFormProps) => {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold">Acceso</label>
+              <p className="text-sm font-medium leading-none">Acceso</p>
               <Select value={access} onValueChange={(v) => setAccess(v as ResourceAccess)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="border border-outline-variant"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
                   <SelectItem value="PUBLIC">Público</SelectItem>
@@ -310,29 +323,32 @@ const EditModal = ({ resource, open, onClose, onSuccess, token }: EditModalProps
           <DialogDescription>Modificá los metadatos del recurso. El archivo no cambia.</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+        <form onSubmit={handleSubmit} className="space-y-4 px-8 pt-2">
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold">Título</label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+            <p className="text-sm font-medium leading-none">Título</p>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="border border-outline-variant" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold">Descripción <span className="font-normal text-muted-foreground">(opcional)</span></label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <p className="text-sm font-medium leading-none">
+              Descripción{' '}
+              <span className="font-normal text-on-surface-variant">(opcional)</span>
+            </p>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="border border-outline-variant" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold">Categoría</label>
+              <p className="text-sm font-medium leading-none">Categoría</p>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="border border-outline-variant"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold">Acceso</label>
+              <p className="text-sm font-medium leading-none">Acceso</p>
               <Select value={access} onValueChange={(v) => setAccess(v as ResourceAccess)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="border border-outline-variant"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="SUBSCRIBERS_ONLY">Solo suscriptores</SelectItem>
                   <SelectItem value="PUBLIC">Público</SelectItem>
