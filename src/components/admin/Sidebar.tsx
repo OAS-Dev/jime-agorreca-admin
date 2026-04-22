@@ -18,6 +18,7 @@ import {
   Video,
   Menu,
   X,
+  CreditCard,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -36,6 +37,8 @@ const videoItems = [
 const sessionItems = [{ href: '/sesiones', label: 'Sesiones en vivo', icon: Video }]
 
 const resourceItems = [{ href: '/recursos', label: 'Recursos', icon: FileDown }]
+
+const planItems = [{ href: '/planes', label: 'Planes y Precios', icon: CreditCard }]
 
 const userItems = [
   { href: '/usuarios/equipo', label: 'Equipo', icon: ShieldCheck },
@@ -197,6 +200,23 @@ export const Sidebar = () => {
               Recursos
             </p>
             {resourceItems.map(({ href, label, icon }) => (
+              <NavItem
+                key={href}
+                href={href}
+                label={label}
+                icon={icon}
+                active={pathname.startsWith(href)}
+                onClose={() => setIsOpen(false)}
+              />
+            ))}
+          </div>
+
+          {/* Sección Planes */}
+          <div className="pt-4">
+            <p className="px-4 pb-2 font-mono text-[10px] font-black uppercase tracking-widest text-ink-muted/60">
+              Membresías
+            </p>
+            {planItems.map(({ href, label, icon }) => (
               <NavItem
                 key={href}
                 href={href}

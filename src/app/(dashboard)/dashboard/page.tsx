@@ -34,6 +34,7 @@ interface ActivityItem {
   name: string
   action: string
   date: string
+  sortKey: string   // ISO — solo para ordenar, no se muestra
   status: 'success' | 'neutral' | 'warning' | 'error'
   statusLabel: string
   href: string
@@ -85,6 +86,7 @@ const fetchActivity = async (
     name: s.user.name,
     action: 'Nueva suscripción',
     date: formatRelative(s.createdAt),
+    sortKey: s.createdAt,
     status: s.status === 'ACTIVE' ? 'success' : s.status === 'PENDING' ? 'warning' : 'neutral',
     statusLabel:
       s.status === 'ACTIVE' ? 'Activa' : s.status === 'PENDING' ? 'Pendiente' : 'Inactiva',
@@ -114,19 +116,15 @@ const fetchActivity = async (
     name: p.author.name,
     action: `Nota publicada: "${p.title.length > 32 ? p.title.slice(0, 32) + '…' : p.title}"`,
     date: formatRelative(p.publishedAt ?? p.createdAt),
+    sortKey: p.publishedAt ?? p.createdAt,
     status: 'success',
     statusLabel: 'Publicada',
     href: `/blog/${p.id}`,
   }))
 
-  // ── Merge + sort by recency ────────────────────────────────────────────────
+  // ── Merge + sort by recency (desc) ────────────────────────────────────────
   const allItems = [...subItems, ...postItems]
-    .sort((a, b) => {
-      // Since we only have relative strings, we keep original order from server
-      // (server returns desc). We interleave by re-parsing would need timestamps.
-      // For simplicity: subs first (already desc), posts next.
-      return 0
-    })
+    .sort((a, b) => new Date(b.sortKey).getTime() - new Date(a.sortKey).getTime())
     .slice(0, 5)
 
   // ── Metrics ───────────────────────────────────────────────────────────────
@@ -137,8 +135,8 @@ const fetchActivity = async (
 
   const totalUsers = users.length
   const activeCount = subs.filter((s) => s.status === 'ACTIVE').length
+  // Porcentaje de usuarios registrados que tienen suscripción activa
   const activePercent = totalUsers > 0 ? Math.round((activeCount / totalUsers) * 100) : 0
-  const totalPercent = Math.min(100, totalUsers)
 
   const metrics: Metric[] = [
     {
@@ -150,7 +148,9 @@ const fetchActivity = async (
     {
       label: 'Usuarios registrados',
       value: totalUsers.toLocaleString('es-AR'),
-      percent: Math.min(totalPercent, 100),
+      // Siempre 100%: es el baseline. La barra de activos muestra
+      // qué fracción de estos usuarios tiene suscripción activa.
+      percent: totalUsers > 0 ? 100 : 0,
       colorClass: 'bg-on-surface',
     },
   ]
