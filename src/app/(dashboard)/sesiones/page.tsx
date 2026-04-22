@@ -995,6 +995,7 @@ const SesionesAdminPage = () => {
                 <TableHead>Título</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Estado</TableHead>
+                <TableHead>Grabación</TableHead>
                 <TableHead>Asistentes</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -1030,19 +1031,29 @@ const SesionesAdminPage = () => {
                     </Badge>
                   </TableCell>
                   <TableCell>
+                    {s.recordingBunnyId ? (
+                      <button
+                        onClick={() => { setRecordingSession(s); setShowRecordingModal(true) }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                      >
+                        <Film className="h-3 w-3" />
+                        Grabada
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { setRecordingSession(s); setShowRecordingModal(true) }}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-outline-variant px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                      >
+                        <UploadCloud className="h-3 w-3" />
+                        Subir grabación
+                      </button>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <span className="text-sm text-ink-muted">{s.attendees}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => { setRecordingSession(s); setShowRecordingModal(true) }}
-                        title="Grabación"
-                        className={s.recordingBunnyId !== null ? 'text-green-600 hover:text-green-700' : 'text-on-surface-variant'}
-                      >
-                        <Film className="h-4 w-4" />
-                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
