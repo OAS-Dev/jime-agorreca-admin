@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import {
   Video,
@@ -11,6 +11,9 @@ import {
   Radio,
   PlayCircle,
   Plus,
+  Film,
+  UploadCloud,
+  RefreshCw,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
@@ -56,6 +59,7 @@ interface LiveSession {
   duration: number | null
   meetUrl: string | null
   recordingUrl: string | null
+  recordingBunnyId: string | null
   status: SessionStatus
   attendees: number
   createdAt: string
@@ -94,6 +98,300 @@ const formatDate = (iso: string) =>
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 
+
+// ── Recording upload modal ────────────────────────────────────────────────────
+
+type BunnyStatus = 'PROCESSING' | 'READY' | 'ERROR'
+
+interface RecordingUploadModalProps {
+  open: boolean
+  onClose: () => void
+  session: LiveSession
+  onSuccess: (updated: LiveSession) => void
+  token: string
+}
+
+const RecordingUploadModal = ({ open, onClose, session, onSuccess, token }: RecordingUploadModalProps) => {
+  const [file, setFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [uploadDone, setUploadDone] = useState(false)
+  const [bunnyStatus, setBunnyStatus] = useState<BunnyStatus | null>(null)
+  const [bunnyDuration, setBunnyDuration] = useState<number | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [showUploadForm, setShowUploadForm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Reset when modal opens
+  useEffect(() => {
+    if (open) {
+      setFile(null)
+      setProgress(0)
+      setUploadDone(false)
+      setBunnyStatus(null)
+      setBunnyDuration(null)
+      setSyncing(false)
+      setShowUploadForm(false)
+      setError(null)
+    }
+  }, [open])
+
+  const hasRecording = session.recordingBunnyId !== null && !showUploadForm
+
+  const handleClose = () => {
+    if (uploading) return
+    onClose()
+  }
+
+  const handleUpload = async () => {
+    if (!file) return
+    setUploading(true)
+    setError(null)
+    setProgress(0)
+    setUploadDone(false)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const { data } = await api.post<{ session: LiveSession }>(
+        `/sessions/${session.id}/recording`,
+        formData,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          onUploadProgress: (evt) => {
+            if (evt.total) setProgress(Math.round((evt.loaded * 100) / evt.total))
+          },
+          maxBodyLength: Infinity,
+          timeout: 0,
+        },
+      )
+      setUploadDone(true)
+      setShowUploadForm(false)
+      onSuccess(data.session)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Error al subir la grabación.'
+      setError(msg)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleSync = async () => {
+    if (syncing) return
+    setSyncing(true)
+    setError(null)
+    try {
+      const { data } = await api.post<{ bunnyStatus: BunnyStatus; duration: number }>(
+        `/sessions/${session.id}/recording/sync`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      setBunnyStatus(data.bunnyStatus)
+      setBunnyDuration(data.duration ?? null)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Error al sincronizar.'
+      setError(msg)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const renderStatusChip = () => {
+    if (uploadDone && !bunnyStatus) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary-container px-3 py-1 text-[10px] font-body font-black uppercase tracking-wide text-on-secondary-container">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Procesando en Bunny...
+        </span>
+      )
+    }
+    if (bunnyStatus === 'PROCESSING') {
+      return (
+        <Badge variant="warning" className="gap-1.5">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Procesando...
+        </Badge>
+      )
+    }
+    if (bunnyStatus === 'READY') {
+      return (
+        <Badge variant="success" className="gap-1">
+          ✓ Lista para reproducir
+          {bunnyDuration ? ` · ${Math.round(bunnyDuration / 60)} min` : ''}
+        </Badge>
+      )
+    }
+    if (bunnyStatus === 'ERROR') {
+      return <Badge variant="error">✗ Error en Bunny</Badge>
+    }
+    return null
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Grabación de sesión</DialogTitle>
+          <DialogDescription>
+            {hasRecording
+              ? 'Esta sesión ya tiene una grabación subida a Bunny.net.'
+              : 'Subí el archivo de video de la sesión para que esté disponible en la plataforma.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 px-8 pt-2 pb-6">
+          {/* ── Estado actual (tiene grabación) ── */}
+          {hasRecording && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-on-surface-variant">ID Bunny</p>
+                  <p className="truncate max-w-[200px] text-xs font-mono text-on-surface">
+                    {session.recordingBunnyId}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-on-surface-variant">Estado</p>
+                  <div className="flex items-center gap-2">
+                    {renderStatusChip() ?? (
+                      <span className="text-xs text-on-surface-variant">Sin sincronizar</span>
+                    )}
+                  </div>
+                </div>
+
+                {bunnyStatus === 'READY' && session.recordingUrl && (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-on-surface-variant">URL embed</p>
+                    <p className="truncate text-xs font-mono text-on-surface bg-surface-container-high rounded-lg px-2 py-1.5">
+                      {session.recordingUrl}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {(bunnyStatus !== 'READY') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className="gap-1.5"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                    Sincronizar
+                  </Button>
+                )}
+                {bunnyStatus === 'ERROR' && (
+                  <Button
+                    size="sm"
+                    onClick={() => { setShowUploadForm(true); setBunnyStatus(null) }}
+                  >
+                    Reintentar subida
+                  </Button>
+                )}
+              </div>
+
+              <div className="pt-1">
+                <button
+                  onClick={() => setShowUploadForm(true)}
+                  className="text-xs text-on-surface-variant underline-offset-2 hover:underline"
+                >
+                  Reemplazar grabación
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Upload form (sin grabación o reemplazo) ── */}
+          {!hasRecording && (
+            <div className="space-y-4">
+              {/* Chip "procesando" post-upload */}
+              {uploadDone && !bunnyStatus && (
+                <div className="flex justify-center py-2">
+                  {renderStatusChip()}
+                </div>
+              )}
+
+              {!uploadDone && (
+                <>
+                  <div
+                    className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-outline-variant/40 bg-surface-container-low p-8 transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                  >
+                    <UploadCloud className="h-8 w-8 text-on-surface-variant/50" />
+                    {file ? (
+                      <p className="text-center font-body text-sm font-semibold text-on-surface">
+                        {file.name}
+                        <span className="ml-1 font-normal text-on-surface-variant">
+                          ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-center font-body text-sm font-medium text-on-surface-variant">
+                        Hacé click para seleccionar
+                        <br />
+                        <span className="text-xs opacity-60">MP4, MOV, WebM, MKV · máx. 2 GB</span>
+                      </p>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/webm,video/x-matroska"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                </>
+              )}
+
+              {/* Progress bar */}
+              {uploading && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between font-body text-xs font-semibold text-on-surface-variant">
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Subiendo...
+                    </span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={handleClose} disabled={uploading}>
+              {hasRecording ? 'Cerrar' : 'Cancelar'}
+            </Button>
+            {!hasRecording && !uploadDone && (
+              <Button onClick={handleUpload} disabled={uploading || !file}>
+                {uploading ? 'Subiendo...' : 'Subir grabación'}
+              </Button>
+            )}
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 // ── New session modal ─────────────────────────────────────────────────────────
 
@@ -546,6 +844,8 @@ const SesionesAdminPage = () => {
   const [deleting, setDeleting] = useState<LiveSession | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [filter, setFilter] = useState<FilterValue>('ALL')
+  const [recordingSession, setRecordingSession] = useState<LiveSession | null>(null)
+  const [showRecordingModal, setShowRecordingModal] = useState(false)
 
   const token = authSession?.backendToken ?? ''
 
@@ -737,6 +1037,15 @@ const SesionesAdminPage = () => {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => { setRecordingSession(s); setShowRecordingModal(true) }}
+                        title="Grabación"
+                        className={s.recordingBunnyId !== null ? 'text-green-600 hover:text-green-700' : 'text-on-surface-variant'}
+                      >
+                        <Film className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setEditing(s)}
                         title="Editar"
                       >
@@ -784,6 +1093,19 @@ const SesionesAdminPage = () => {
         onCancel={() => setDeleting(null)}
         loading={deleteLoading}
       />
+
+      {recordingSession && (
+        <RecordingUploadModal
+          open={showRecordingModal}
+          onClose={() => { setShowRecordingModal(false); setRecordingSession(null) }}
+          session={recordingSession}
+          onSuccess={(updated) => {
+            setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+            setRecordingSession(updated)
+          }}
+          token={token}
+        />
+      )}
     </div>
   )
 }
