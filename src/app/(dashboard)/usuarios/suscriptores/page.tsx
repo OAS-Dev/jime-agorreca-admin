@@ -14,6 +14,8 @@ import {
   Zap,
   Mail,
   Hash,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react'
 import api from '@/lib/api'
 import {
@@ -54,6 +56,7 @@ interface Subscription {
     email: string
     image: string | null
     isActivated: boolean
+    activationTokenExpiresAt: string | null
   }
   payments: {
     id: string
@@ -94,6 +97,11 @@ const isExpiringSoon = (endDate: string | null): boolean => {
   if (!endDate) return false
   const days = (new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   return days > 0 && days <= 7
+}
+
+const isActivationTokenExpired = (expiresAt: string | null): boolean => {
+  if (!expiresAt) return false
+  return new Date(expiresAt) < new Date()
 }
 
 const STATUS_CONFIG: Record<
@@ -206,20 +214,26 @@ const SuscriptoresPage = () => {
   const [page, setPage] = useState(1)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [resentId, setResentId] = useState<string | null>(null)
+  const [resendError, setResendError] = useState<string | null>(null)
 
-  const handleResendActivation = async (email: string, subId: string) => {
+  const handleRegenerateActivation = async (userId: string, subId: string) => {
     setResendingId(subId)
     setResentId(null)
+    setResendError(null)
     try {
       await api.post(
-        '/auth/resend-activation',
-        { email },
+        `/users/${userId}/regenerate-activation`,
+        {},
         { headers: { Authorization: `Bearer ${session?.backendToken}` } },
       )
       setResentId(subId)
-      setTimeout(() => setResentId(null), 3000)
-    } catch {
-      // silencioso — el endpoint siempre responde 200
+      setTimeout(() => setResentId(null), 4000)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Error al regenerar el token'
+      setResendError(msg)
+      setTimeout(() => setResendError(null), 4000)
     } finally {
       setResendingId(null)
     }
@@ -345,6 +359,14 @@ const SuscriptoresPage = () => {
           />
         </div>
       </div>
+
+      {/* ── Toast error regenerar ───────────────────────────────────────── */}
+      {resendError && (
+        <div className="flex items-center gap-2 rounded-2xl bg-destructive/10 px-4 py-3 font-body text-sm font-semibold text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {resendError}
+        </div>
+      )}
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <section className="overflow-hidden rounded-[2rem] bg-surface-container-lowest shadow-kinetic">
@@ -492,22 +514,50 @@ const SuscriptoresPage = () => {
 
                     {/* Acciones */}
                     <TableCell>
-                      {!sub.user.isActivated && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 font-body text-xs font-bold"
-                          disabled={resendingId === sub.id}
-                          onClick={() => handleResendActivation(sub.user.email, sub.id)}
-                        >
-                          <Mail className="h-3.5 w-3.5" />
-                          {resentId === sub.id
-                            ? '¡Enviado!'
-                            : resendingId === sub.id
-                              ? 'Enviando...'
-                              : 'Reenviar activación'}
-                        </Button>
-                      )}
+                      {!sub.user.isActivated && (() => {
+                        const tokenExpired = isActivationTokenExpired(sub.user.activationTokenExpiresAt)
+                        const isSending = resendingId === sub.id
+                        const isSent = resentId === sub.id
+
+                        return (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              {tokenExpired ? (
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                              ) : (
+                                <Mail className="h-3.5 w-3.5 shrink-0 text-on-surface-variant" />
+                              )}
+                              <span className={`font-body text-[11px] font-bold ${tokenExpired ? 'text-amber-600' : 'text-on-surface-variant'}`}>
+                                {tokenExpired ? 'Token vencido' : 'Sin activar'}
+                              </span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={tokenExpired ? 'default' : 'outline'}
+                              className="h-7 gap-1.5 font-body text-xs font-bold"
+                              disabled={isSending}
+                              onClick={() => handleRegenerateActivation(sub.user.id, sub.id)}
+                            >
+                              {isSending ? (
+                                <>
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                  Enviando...
+                                </>
+                              ) : isSent ? (
+                                <>
+                                  <Mail className="h-3 w-3" />
+                                  ¡Email enviado!
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="h-3 w-3" />
+                                  {tokenExpired ? 'Regenerar token' : 'Reenviar email'}
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )
+                      })()}
                     </TableCell>
                   </TableRow>
                 )

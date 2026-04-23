@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useSession } from 'next-auth/react'
-import { ShieldCheck, UserPlus, SquarePen, Zap, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { ShieldCheck, UserPlus, SquarePen, Trash2, Zap, Eye, EyeOff, Loader2, ShieldOff } from 'lucide-react'
 import api from '@/lib/api'
 import {
   Table,
@@ -258,6 +258,51 @@ const CreateAdminDialog = ({ open, token, onOpenChange, onSuccess }: CreateAdmin
   )
 }
 
+// ── Confirm dialog genérico ───────────────────────────────────────────────────
+
+interface ConfirmDialogProps {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  title: string
+  description: string
+  confirmLabel: string
+  confirmClass?: string
+  loading: boolean
+  error: string | null
+  onConfirm: () => void
+}
+
+const ConfirmDialog = ({
+  open, onOpenChange, title, description, confirmLabel, confirmClass, loading, error, onConfirm,
+}: ConfirmDialogProps) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{description}</DialogDescription>
+      </DialogHeader>
+      {error && (
+        <p className="rounded-2xl bg-destructive/10 px-4 py-3 font-body text-sm font-semibold text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-3 px-8 pb-8">
+        <Button
+          variant="ghost"
+          onClick={() => onOpenChange(false)}
+          disabled={loading}
+          className="flex-1 bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+        >
+          Cancelar
+        </Button>
+        <Button onClick={onConfirm} disabled={loading} className={`flex-1 ${confirmClass ?? ''}`}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : confirmLabel}
+        </Button>
+      </div>
+    </DialogContent>
+  </Dialog>
+)
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const EquipoPage = () => {
@@ -267,6 +312,16 @@ const EquipoPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+
+  // Demote
+  const [demoteTarget, setDemoteTarget] = useState<AdminUser | null>(null)
+  const [demoteLoading, setDemoteLoading] = useState(false)
+  const [demoteError, setDemoteError] = useState<string | null>(null)
+
+  // Delete
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!session?.backendToken) return
@@ -292,9 +347,47 @@ const EquipoPage = () => {
     setModalOpen(false)
   }
 
+  const handleDemoteConfirm = async () => {
+    if (!demoteTarget || !session?.backendToken) return
+    setDemoteLoading(true)
+    setDemoteError(null)
+    try {
+      await api.patch(
+        `/users/${demoteTarget.id}/role`,
+        { role: 'USER' },
+        { headers: { Authorization: `Bearer ${session.backendToken}` } },
+      )
+      setAdmins((prev) => prev.filter((a) => a.id !== demoteTarget.id))
+      setDemoteTarget(null)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al quitar permisos'
+      setDemoteError(msg)
+    } finally {
+      setDemoteLoading(false)
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget || !session?.backendToken) return
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      await api.delete(`/users/${deleteTarget.id}`, {
+        headers: { Authorization: `Bearer ${session.backendToken}` },
+      })
+      setAdmins((prev) => prev.filter((a) => a.id !== deleteTarget.id))
+      setDeleteTarget(null)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al eliminar usuario'
+      setDeleteError(msg)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-10 p-4 sm:p-6 lg:p-10 xl:p-12">
-      {/* Dialog */}
+      {/* Dialogs */}
       {session?.backendToken && (
         <CreateAdminDialog
           open={modalOpen}
@@ -303,6 +396,28 @@ const EquipoPage = () => {
           onSuccess={handleAdminCreated}
         />
       )}
+      <ConfirmDialog
+        open={!!demoteTarget}
+        onOpenChange={(v) => { if (!v) { setDemoteTarget(null); setDemoteError(null) } }}
+        title="¿Quitar permisos de admin?"
+        description={`${demoteTarget?.name ?? 'Este usuario'} perderá acceso al panel de administración. Podrás volver a asignarle el rol cuando quieras.`}
+        confirmLabel="Quitar permisos"
+        confirmClass="bg-amber-500 hover:bg-amber-600 text-white"
+        loading={demoteLoading}
+        error={demoteError}
+        onConfirm={handleDemoteConfirm}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => { if (!v) { setDeleteTarget(null); setDeleteError(null) } }}
+        title="¿Eliminar usuario?"
+        description={`Esta acción eliminará permanentemente la cuenta de ${deleteTarget?.name ?? 'este usuario'}. No se puede deshacer.`}
+        confirmLabel="Eliminar"
+        confirmClass="bg-destructive hover:bg-destructive/90 text-white"
+        loading={deleteLoading}
+        error={deleteError}
+        onConfirm={handleDeleteConfirm}
+      />
 
       {/* ── Page header + metric ────────────────────────────────────────── */}
       <section className="grid grid-cols-1 items-end gap-8 md:grid-cols-3">
@@ -411,13 +526,28 @@ const EquipoPage = () => {
                   </TableCell>
 
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-xl text-on-surface-variant"
-                    >
-                      <SquarePen className="h-5 w-5" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-xl text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                        disabled={user.id === session?.user?.id}
+                        title="Quitar permisos de admin"
+                        onClick={() => { setDemoteTarget(user); setDemoteError(null) }}
+                      >
+                        <ShieldOff className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        disabled={user.id === session?.user?.id}
+                        title="Eliminar usuario"
+                        onClick={() => { setDeleteTarget(user); setDeleteError(null) }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
