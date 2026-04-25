@@ -131,7 +131,7 @@ export const Sidebar = () => {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-1">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {mainItems.map(({ href, label, icon }) => (
             <NavItem
               key={href}

@@ -433,6 +433,7 @@ const PlanesPage = () => {
 
   const handleToggle = async (plan: Plan) => {
     setTogglingId(plan.id)
+    setError(null)
     try {
       const { data } = await api.patch<{ plan: Plan }>(
         `/subscriptions/plans/${plan.id}/toggle`,
@@ -440,8 +441,11 @@ const PlanesPage = () => {
         { headers: { Authorization: `Bearer ${token}` } },
       )
       setPlans((prev) => prev.map((p) => (p.id === data.plan.id ? data.plan : p)))
-    } catch {
-      // silencioso
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Error al activar/desactivar el plan'
+      setError(msg)
     } finally {
       setTogglingId(null)
     }
